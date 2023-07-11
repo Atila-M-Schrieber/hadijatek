@@ -1,1 +1,0 @@
-window.SIDEBAR_ITEMS = {"enum":["RegionType"],"struct":["Base","Region"],"type":["Border"]};

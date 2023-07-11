@@ -1,1 +1,0 @@
-window.ALL_CRATES = ["create_map","fixedbitset","hashbrown","indexmap","itoa","petgraph","pin_project_lite","prelude","proc_macro2","quote","ryu","serde","serde_derive","serde_json","syn","tokio","unicode_ident"];
