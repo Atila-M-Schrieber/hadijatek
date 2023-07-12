@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use svg::node::element::path::Data;
@@ -14,7 +15,7 @@ mod error;
 pub fn read_event(
     event: Event<'_>,
     teams: Vec<Rc<Team>>,
-) -> Result<(String, Option<rg::Base>, Shape, Color)> {
+) -> Result<(String, Option<RefCell<rg::Base>>, Shape, Color)> {
     use error::ReadEventError::*;
     if let Event::Tag(Path, _, attributes) = event {
         let name = attributes
@@ -41,9 +42,16 @@ pub fn read_event(
 
         let mut base = None;
         if stroke_color == Color::new(0, 0, 0) {
-            base = Some(rg::Base::new())
+            base = Some(RefCell::new(rg::Base::new()))
         }
-        // TODO take teams, and if color of team matches color of region, it is the default owner
+        // if this is a home base set it to the home base
+        if let Some(team) = teams.iter().find(|t| color == t.color()) {
+            if let Some(ref base) = base {
+                base.borrow_mut().set(Rc::clone(team))
+            } else {
+                return Err(TeamColorOnNonBaseRegionError(color).into());
+            }
+        }
 
         let data = Data::parse(attributes.get("d").ok_or(NoDAttributeError)?)?;
         let shape: Shape = data.try_into()?;

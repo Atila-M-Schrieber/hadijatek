@@ -1,5 +1,7 @@
 use std::{error, fmt};
 
+use crate::draw::Color;
+
 #[derive(Debug)]
 pub enum ReadEventError {
     NoNameError,
@@ -8,6 +10,7 @@ pub enum ReadEventError {
     NoStrokeError,
     LastBitError,
     FirstBitError,
+    TeamColorOnNonBaseRegionError(Color),
     NoPathError,
     NoDAttributeError,
 }
@@ -25,6 +28,7 @@ impl fmt::Display for ReadEventError {
             NoStrokeError => write!(f, "No 'stroke' property found"),
             LastBitError => write!(f, "A property's value could not be processed"),
             FirstBitError => write!(f, "A property's key could not be processed"),
+            TeamColorOnNonBaseRegionError(color) => write!(f, "Team color {color} found on a region without a base. Only based regions can fly the team color."),
             NoPathError => write!(f, "This SVG element is not a Path"),
             NoDAttributeError => write!(f, "Can't find the d attribute in this path elment"),
         }
