@@ -1,8 +1,16 @@
+use eyre::Report;
 use serde::{Deserialize, Serialize};
 use std::{error, fmt, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color(u8, u8, u8);
+
+impl Color {
+    pub fn new(r: u8, g: u8, b: u8) -> Self {
+        Color(r, g, b)
+    }
+}
+
 #[derive(Debug)]
 pub enum ColorParseError {
     LengthError,
@@ -30,18 +38,19 @@ impl fmt::Display for Color {
 }
 
 impl FromStr for Color {
-    type Err = ColorParseError;
+    type Err = Report;
     /// Must be valid hex color value, preceded by #. #000000 to #ffffff
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use ColorParseError::*;
         if s.len() != 7 {
-            return Err(ColorParseError::LengthError);
+            return Err(LengthError.into());
         } else if &s[0..1] != "#" {
-            return Err(ColorParseError::FormatError);
+            return Err(FormatError.into());
         }
 
-        let r = u8::from_str_radix(&s[1..3], 16).map_err(|_| ColorParseError::ParseIntError)?;
-        let g = u8::from_str_radix(&s[3..5], 16).map_err(|_| ColorParseError::ParseIntError)?;
-        let b = u8::from_str_radix(&s[5..7], 16).map_err(|_| ColorParseError::ParseIntError)?;
+        let r = u8::from_str_radix(&s[1..3], 16).map_err(|_| ParseIntError)?;
+        let g = u8::from_str_radix(&s[3..5], 16).map_err(|_| ParseIntError)?;
+        let b = u8::from_str_radix(&s[5..7], 16).map_err(|_| ParseIntError)?;
 
         Ok(Color(r, g, b))
     }

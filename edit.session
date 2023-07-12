@@ -3,7 +3,7 @@ let s:so_save = &g:so | let s:siso_save = &g:siso | setg so=0 siso=0 | setl so=-
 let v:this_session=expand("<sfile>:p")
 silent only
 silent tabonly
-cd ~/Programming/rust/hadijatek/create_map
+cd ~/Programming/rust/hadijatek/prelude
 if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
@@ -13,17 +13,24 @@ if &shortmess =~ 'A'
 else
   set shortmess=aoO
 endif
-badd +2 ~/Programming/rust/hadijatek/prelude/src/lib.rs
-badd +8 src/main.rs
+badd +5 src/lib.rs
+badd +8 ~/Programming/rust/hadijatek/create_map/src/main.rs
 badd +1 ~/Programming/rust/hadijatek/executor/src/main.rs
 badd +1 ~/Programming/rust/hadijatek/webui/src/main.rs
 badd +1 ~/Programming/haskell/hadijatek/Hadijatek.hs
-badd +8 ~/Programming/rust/hadijatek/prelude/src/game/mod.rs
-badd +1 ~/Programming/rust/hadijatek/prelude/src/game/region.rs
-badd +5 ~/Programming/rust/hadijatek/prelude/src/game/team.rs
-badd +11 Cargo.toml
-badd +17 src/read/mod.rs
+badd +8 src/game/mod.rs
+badd +1 src/game/region.rs
+badd +5 src/game/team.rs
+badd +11 ~/Programming/rust/hadijatek/create_map/Cargo.toml
+badd +17 ~/Programming/rust/hadijatek/create_map/src/read/mod.rs
 badd +1 ~/Programming/haskell/hadijatek/createMap.hs
+badd +47 src/game/region/mod.rs
+badd +21 src/draw/color.rs
+badd +9 src/game/region/errors.rs
+badd +65 src/draw/shape.rs
+badd +15 src/draw/point.rs
+badd +47 src/draw/svg/mod.rs
+badd +29 src/draw/svg/error.rs
 argglobal
 %argdel
 set stal=2
@@ -32,9 +39,9 @@ tabnew +setlocal\ bufhidden=wipe
 tabnew +setlocal\ bufhidden=wipe
 tabnew +setlocal\ bufhidden=wipe
 tabrewind
-edit ~/Programming/rust/hadijatek/prelude/src/lib.rs
+edit src/draw/shape.rs
 argglobal
-balt ~/Programming/rust/hadijatek/prelude/src/game/mod.rs
+balt src/draw/svg/mod.rs
 setlocal fdm=expr
 setlocal fde=nvim_treesitter#foldexpr()
 setlocal fmr={{{,}}}
@@ -43,19 +50,40 @@ setlocal fdl=0
 setlocal fml=1
 setlocal fdn=20
 setlocal fen
-7
+11
 normal! zo
-12
+17
 normal! zo
-16
+18
 normal! zo
-let s:l = 5 - ((4 * winheight(0) + 24) / 49)
+20
+normal! zo
+30
+normal! zo
+32
+normal! zo
+37
+normal! zo
+40
+normal! zo
+41
+normal! zo
+42
+normal! zo
+51
+normal! zo
+53
+normal! zo
+51
+normal! zc
+64
+normal! zo
+let s:l = 77 - ((50 * winheight(0) + 24) / 49)
 if s:l < 1 | let s:l = 1 | endif
 keepjumps exe s:l
 normal! zt
-keepjumps 5
-normal! 015|
-if exists(':tcd') == 2 | tcd ~/Programming/rust/hadijatek/prelude | endif
+keepjumps 77
+normal! 021|
 tabnext
 edit ~/Programming/rust/hadijatek/create_map/src/read/mod.rs
 argglobal
@@ -68,17 +96,9 @@ setlocal fdl=0
 setlocal fml=1
 setlocal fdn=20
 setlocal fen
-7
-normal! zo
 8
 normal! zo
-14
-normal! zo
-16
-normal! zo
-28
-normal! zo
-31
+12
 normal! zo
 let s:l = 18 - ((17 * winheight(0) + 24) / 49)
 if s:l < 1 | let s:l = 1 | endif
@@ -86,6 +106,7 @@ keepjumps exe s:l
 normal! zt
 keepjumps 18
 normal! 037|
+if exists(':tcd') == 2 | tcd ~/Programming/rust/hadijatek/create_map | endif
 tabnext
 edit ~/Programming/haskell/hadijatek/createMap.hs
 argglobal
