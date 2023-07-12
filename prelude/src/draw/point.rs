@@ -29,6 +29,12 @@ impl Point {
     }
 }
 
+impl From<Point> for (f32, f32) {
+    fn from(point: Point) -> (f32, f32) {
+        (0., 0.)
+    }
+}
+
 /* #[derive(Debug)]
 pub enum ParsePointError {
     ParseFloatError,
