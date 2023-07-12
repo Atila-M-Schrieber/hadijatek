@@ -9,6 +9,14 @@ impl Color {
     pub fn new(r: u8, g: u8, b: u8) -> Self {
         Color(r, g, b)
     }
+
+    pub fn black() -> Self {
+        Color(0, 0, 0)
+    }
+
+    pub fn white() -> Self {
+        Color(255, 255, 255)
+    }
 }
 
 #[derive(Debug)]

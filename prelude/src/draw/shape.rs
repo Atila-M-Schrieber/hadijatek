@@ -1,16 +1,44 @@
 use serde::{Deserialize, Serialize};
-use std::{error, fmt, str::FromStr};
-use svg::node::element::path::{Command, Data, Position};
+use std::{error, fmt};
+use svg::node::element::path::{Command, Data, Parameters, Position};
 
 use super::Point;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape(Vec<Point>);
 
+pub struct ShapeIter<'a> {
+    shape: &'a Shape,
+    index: usize,
+}
+
+impl<'a> IntoIterator for &'a Shape {
+    type Item = &'a Point;
+    type IntoIter = ShapeIter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ShapeIter {
+            shape: self,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for ShapeIter<'a> {
+    type Item = &'a Point;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.shape.0.get(self.index);
+        self.index += 1;
+        result
+    }
+}
+
 #[derive(Debug)]
 pub enum ShapeFromDataError {
     FirstNotMoveError,
     LastNotCloseError,
+    NonFirstMoveError(usize),
     NoFirstParamsError,
     EarlyCloseError,
     UnsupportedCommandError(Command),
@@ -24,6 +52,10 @@ impl fmt::Display for ShapeFromDataError {
         match self {
             FirstNotMoveError => write!(f, "First path command is not a move"),
             LastNotCloseError => write!(f, "Last path command is not a close"),
+            NonFirstMoveError(pos) => write!(
+                f,
+                "The {pos}th command is a move, but only the first command can be a move"
+            ),
             NoFirstParamsError => write!(f, "The first parameter(s) of a command can't be found"),
             EarlyCloseError => write!(f, "There is a Close command too early in the SVG path"),
             UnsupportedCommandError(cmd) => write!(f, "This command is unsupported: {:?}", cmd),
@@ -123,9 +155,27 @@ impl TryFrom<Data> for Shape {
                 } else {
                     return Err(LastNotCloseError);
                 }
+            } else if let Move(_, _) = command {
+                return Err(NonFirstMoveError(i));
             }
             let _ = push_command(command, &mut pos, &mut vec);
         }
         Ok(Shape(vec))
+    }
+}
+
+impl From<Shape> for Vec<Point> {
+    fn from(shape: Shape) -> Vec<Point> {
+        shape.0
+    }
+}
+
+impl From<Shape> for Data {
+    /// Subject to future optimization, currently is always just one big move (absolute) command
+    fn from(shape: Shape) -> Data {
+        let mut data = Data::new();
+        let vec: Vec<_> = shape.into();
+        data = data.move_to(super::point::MyParameters::from(vec));
+        data.close()
     }
 }

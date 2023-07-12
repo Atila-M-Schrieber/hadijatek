@@ -1,6 +1,7 @@
 // use std::{error, fmt, num::ParseFloatError, str::FromStr};
 
 use serde::{Deserialize, Serialize};
+use svg::node::element::path::Parameters;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Point(f32, f32);
@@ -31,7 +32,37 @@ impl Point {
 
 impl From<Point> for (f32, f32) {
     fn from(point: Point) -> (f32, f32) {
-        (0., 0.)
+        (point.0, point.1)
+    }
+}
+
+impl From<Point> for Parameters {
+    fn from(point: Point) -> Parameters {
+        let (x, y) = point.into();
+        let mut vec = Vec::new();
+        vec.push(x);
+        vec.push(y);
+        vec.into()
+    }
+}
+
+// Why the fuck is this necessary. Damn orphan rule.
+pub struct MyParameters(Parameters);
+
+impl From<Vec<Point>> for MyParameters {
+    fn from(points: Vec<Point>) -> MyParameters {
+        let mut vec = Vec::new();
+        for Point(x, y) in points {
+            vec.push(x);
+            vec.push(y);
+        }
+        MyParameters(vec.into())
+    }
+}
+
+impl From<MyParameters> for Parameters {
+    fn from(why: MyParameters) -> Parameters {
+        why.0
     }
 }
 

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use svg::node::element::path::{Command, Data};
+use svg::node::element::path::Data;
 use svg::{node::element::tag::Path, parser::Event};
 
 use eyre::Result;
@@ -46,7 +46,7 @@ pub fn read_event(
         // TODO take teams, and if color of team matches color of region, it is the default owner
 
         let data = Data::parse(attributes.get("d").ok_or(NoDAttributeError)?)?;
-        let shape = data.try_into()?;
+        let shape: Shape = data.try_into()?;
 
         println!(
             "{name}: fill:{color}; stroke:{stroke_color}; shape: {:?}",
