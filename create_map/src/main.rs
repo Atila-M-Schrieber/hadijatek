@@ -1,11 +1,15 @@
+mod graph;
 mod read;
+mod write;
 
 use std::io;
 
 use eyre::Result;
-use prelude::{draw::Color, lang, lang::Language, lang::LANGUAGE};
+use prelude::{draw::Color, lang, lang::Language, lang::LANGUAGE, State};
 
+use crate::graph::*;
 use crate::read::*;
+use crate::write::*;
 
 fn main() -> Result<()> {
     get_lang()?;
@@ -25,8 +29,13 @@ fn main() -> Result<()> {
     let water_color: Color = water_color.trim().parse()?;
 
     let teams = get_teams(&path)?;
+    let pre_regions = get_regions(&path, &teams).unwrap();
+    let map = graphify(pre_regions, water_color)?;
+    let state = State::new(teams, map);
 
-    get_regions(&path, teams).unwrap();
+    let db = get_db()?;
+
+    write_state(state, db)?;
 
     Ok(())
 }

@@ -17,3 +17,14 @@ pub struct State {
     regions: Csr<Rc<Region>, Border, Undirected>,
     units: RefCell<Vec<Unit>>,
 }
+
+impl State {
+    /// All game states at creation will have no units
+    pub fn new(teams: Vec<Rc<Team>>, regions: Csr<Rc<Region>, Border, Undirected>) -> Self {
+        State {
+            teams,
+            regions,
+            units: RefCell::new(Vec::new()),
+        }
+    }
+}

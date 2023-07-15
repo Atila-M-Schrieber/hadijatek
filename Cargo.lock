@@ -55,6 +55,7 @@ name = "create_map"
 version = "0.0.1"
 dependencies = [
  "eyre",
+ "petgraph",
  "prelude",
  "serde_json",
  "svg",

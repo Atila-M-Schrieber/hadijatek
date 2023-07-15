@@ -1,10 +1,14 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::{io, rc::Rc};
 
+use prelude::draw::Shape;
 use prelude::lang;
+use prelude::region::Base;
 use prelude::{
+    db::Database,
     draw::{svg::*, Color},
     lang::*,
     team::Team,
@@ -235,7 +239,10 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
     Ok(teams)
 }
 
-pub fn get_regions(path: &str, teams: Vec<Rc<Team>>) -> Result<()> {
+pub fn get_regions(
+    path: &str,
+    teams: &Vec<Rc<Team>>,
+) -> Result<Vec<(String, Option<RefCell<Base>>, Shape, Color)>> {
     let mut content = String::new();
 
     let mut stuff = Vec::new();
@@ -247,5 +254,9 @@ pub fn get_regions(path: &str, teams: Vec<Rc<Team>>) -> Result<()> {
 
     println!("Succeded: {}, Failed: {}", num_succ, stuff.len() - num_succ);
 
-    Ok(())
+    todo!()
+}
+
+pub fn get_db() -> Result<Box<dyn Database>> {
+    todo!()
 }
