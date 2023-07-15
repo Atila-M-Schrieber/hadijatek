@@ -7,7 +7,7 @@ use self::{
 };
 use petgraph::{csr::Csr, Undirected};
 
-pub mod order;
+// pub mod order;
 pub mod region;
 pub mod team;
 pub mod unit;

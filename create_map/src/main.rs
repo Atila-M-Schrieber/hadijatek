@@ -19,9 +19,10 @@ fn main() -> Result<()> {
             "What is the color of the sea regions"
         ] + ": "
     );
+    io::Write::flush(&mut io::stdout()).expect("Failed to flush stdout");
     let mut water_color = String::new();
     io::stdin().read_line(&mut water_color)?;
-    let water_color: Color = water_color.parse()?;
+    let water_color: Color = water_color.trim().parse()?;
 
     let teams = get_teams(&path)?;
 

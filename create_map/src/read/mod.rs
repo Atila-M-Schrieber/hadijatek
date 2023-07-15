@@ -12,14 +12,23 @@ use prelude::{
 
 use eyre::Result;
 
+macro_rules! print_flush {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        print!($($arg)*);
+        std::io::stdout().flush().expect("Failed to flush stdout");
+    }};
+}
+
 pub fn get_lang() -> Result<()> {
     let mut s = String::new();
-    print!("Válassz nyelvet (enter = magyar) / Select language (enter = hungarian): ");
+    print_flush!("Válassz nyelvet (enter = magyar) / Select language (enter = hungarian): ");
+
     io::stdin().read_line(&mut s)?;
 
     while match_set_language(&s).is_err() {
         // If it's just empty, stick with default
-        if s.is_empty() {
+        if s == "\n" {
             println!(
                 "{}: {}",
                 lang!["Alapértelmezett nyelv használata", "Using default language"],
@@ -28,7 +37,7 @@ pub fn get_lang() -> Result<()> {
             return Ok(());
         }
 
-        print!("Invalid opció, próbálkozz újra / Invalid option, try again: ");
+        print_flush!("Invalid opció, próbálkozz újra / Invalid option, try again: ");
         io::stdin().read_line(&mut s)?;
     }
 
@@ -56,42 +65,80 @@ pub fn get_path() -> Result<String> {
         if path.is_file()
             && path.extension().map(|s| s.to_string_lossy().to_lowercase()) == Some("svg".into())
         {
-            println!("{i}: {}", path.display());
             paths.insert(i, path);
         }
     }
 
-    print!(
-        "{}",
-        lang!["A térkép file száma: ", "The map file's number: "]
-    );
-    let mut s = String::new();
-    io::stdin().read_line(&mut s)?;
-
-    loop {
-        let pass = match s.parse::<usize>() {
-            Err(_) => false,
-            Ok(i) if i > paths.len() => false,
-            _ => true,
-        };
-
-        if pass {
-            break;
+    match paths.len() {
+        // If only one .svg, it must be that
+        1 => {
+            let path: String = paths.into_iter().next().unwrap().1.to_string_lossy().into();
+            println!(
+                "{}: {}",
+                lang!["Csak egy .svg file található", "Only one .svg file found"],
+                path
+            );
+            print_flush!(
+                "{}: ",
+                lang!["Nyomj Entert ha ez jó", "Press Enter to confirm"]
+            );
+            let mut c = [0; 1];
+            io::stdin().read_exact(&mut c)?;
+            return match c[0] as char {
+                '\n' => Ok(path),
+                _ => {
+                    Err(io::Error::new(io::ErrorKind::NotFound, "Single file not selected").into())
+                }
+            };
         }
-
-        print!(
-            "{}",
-            lang![
-                "Ilyen számú file nem található, próbáld újra: ",
-                "No such file number found, try again: "
+        0 => {
+            println!(
+                "{}",
+                lang![
+                "Nincs .svg file ebben a mappában. Futtasd ezt a programot ott, ahol a térkép van.",
+                "No .svg files in this directory. Run this program where the map file is."
             ]
-        );
-        io::stdin().read_line(&mut s)?;
+            );
+            return Err(io::Error::new(io::ErrorKind::NotFound, "No .svg file found.").into());
+        }
+        _ => {
+            for (i, path) in &paths {
+                println!("{i}: {}", path.display());
+            }
+
+            print_flush!(
+                "{}",
+                lang!["A térkép file száma: ", "The map file's number: "]
+            );
+            let mut s = String::new();
+            io::stdin().read_line(&mut s)?;
+
+            loop {
+                let pass = match s.parse::<usize>() {
+                    Err(_) => false,
+                    Ok(i) if i > paths.len() => false,
+                    _ => true,
+                };
+
+                if pass {
+                    break;
+                }
+
+                print_flush!(
+                    "{}",
+                    lang![
+                        "Ilyen számú file nem található, próbáld újra: ",
+                        "No such file number found, try again: "
+                    ]
+                );
+                io::stdin().read_line(&mut s)?;
+            }
+
+            let path = paths.get(&s.parse::<usize>()?).unwrap().to_string_lossy();
+
+            Ok(path.into())
+        }
     }
-
-    let path = paths.get(&s.parse::<usize>()?).unwrap().to_string_lossy();
-
-    Ok(path.into())
 }
 
 /// Gets teams from user input, or *path*.teams file, in which case it asks the user if the teams
@@ -114,7 +161,7 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
             for team in &teams {
                 println!("{:?}", *team);
             }
-            print!(
+            print_flush!(
                 "{}",
                 lang![
                     "Nyomj Enter-t, ha jók a csapatok. Ha nem, írj be bármi mást: ",
@@ -127,7 +174,7 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
                 return Ok(teams);
             }
         } else {
-            print!(
+            print_flush!(
                 "{}",
                 lang![
                     "Nem sikerült a .teams file-t beolvasni. ",
@@ -136,7 +183,7 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
             );
         }
     } else {
-        print!("{}", lang!["Nincs .teams file. ", "No .teams file found. "]);
+        print_flush!("{}", lang!["Nincs .teams file. ", "No .teams file found. "]);
     }
 
     println!(
@@ -150,7 +197,7 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
     let mut s = String::new();
     let mut teams = Vec::new();
     loop {
-        print!("{}", lang!["A csapat neve: ", "The name of the team: "]);
+        print_flush!("{}", lang!["A csapat neve: ", "The name of the team: "]);
         io::stdin().read_line(&mut s)?;
         let name = s.clone();
 
@@ -158,7 +205,7 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
             break;
         }
 
-        print!("{}", lang!["A csapat színe: ", "The team's color: "]);
+        print_flush!("{}", lang!["A csapat színe: ", "The team's color: "]);
         io::stdin().read_line(&mut s)?;
 
         let color;
@@ -168,7 +215,7 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
                 break;
             }
 
-            print!(
+            print_flush!(
                 "{}",
                 lang![
                     "Ilyen szín nincs, próbáld újra: ",
