@@ -15,7 +15,13 @@ pub enum RegionType {
     Sea,
 }
 
-pub type Border = RegionType;
+#[derive(Debug, Clone)]
+pub enum Border {
+    Land,
+    Shore,
+    Strait(Rc<Region>), // will simplyfy orders involving straits
+    Sea,
+}
 
 #[derive(Debug)]
 pub struct Base {
@@ -28,6 +34,12 @@ impl Base {
     }
     pub fn set(&mut self, team: Rc<Team>) {
         self.owner = Some(Rc::clone(&team))
+    }
+}
+
+impl Default for Base {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

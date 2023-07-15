@@ -21,8 +21,8 @@ impl Color {
 
 #[derive(Debug)]
 pub enum ColorParseError {
-    LengthError,
-    FormatError,
+    BadLength,
+    BadFormat,
     ParseIntError,
 }
 
@@ -30,8 +30,8 @@ impl fmt::Display for ColorParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use ColorParseError::*;
         match self {
-            LengthError => write!(f, "Failed to parse color: wrong length"),
-            FormatError => write!(f, "Failed to parse color: no '#' sign"),
+            BadLength => write!(f, "Failed to parse color: wrong length"),
+            BadFormat => write!(f, "Failed to parse color: no '#' sign"),
             ParseIntError => write!(f, "Failed to parse color to integers"),
         }
     }
@@ -50,10 +50,10 @@ impl FromStr for Color {
     /// Must be valid hex color value, preceded by #. #000000 to #ffffff
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         use ColorParseError::*;
-        if s.len() != 7 {
-            return Err(LengthError.into());
-        } else if &s[0..1] != "#" {
-            return Err(FormatError.into());
+        if s.len() == 7 && &s[0..1] != "#" {
+            return Err(BadFormat.into());
+        } else if s.len() != 6 {
+            return Err(BadLength.into());
         }
 
         let r = u8::from_str_radix(&s[1..3], 16).map_err(|_| ParseIntError)?;

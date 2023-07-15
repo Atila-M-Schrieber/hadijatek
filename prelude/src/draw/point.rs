@@ -39,10 +39,7 @@ impl From<Point> for (f32, f32) {
 impl From<Point> for Parameters {
     fn from(point: Point) -> Parameters {
         let (x, y) = point.into();
-        let mut vec = Vec::new();
-        vec.push(x);
-        vec.push(y);
-        vec.into()
+        vec![x, y].into()
     }
 }
 

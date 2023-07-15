@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{error, fmt};
-use svg::node::element::path::{Command, Data, Parameters, Position};
+use svg::node::element::path::{Command, Data, Position};
 
 use super::Point;
 
@@ -104,7 +104,7 @@ fn push_command(
             }
         }
         HorizontalLine(move_type, params) => {
-            for (i, &param) in params.to_vec().iter().enumerate() {
+            for (_, &param) in params.to_vec().iter().enumerate() {
                 use Position::*;
                 match *move_type {
                     Absolute => pos.move_abs_x(param),
@@ -114,7 +114,7 @@ fn push_command(
             }
         }
         VerticalLine(move_type, params) => {
-            for (i, &param) in params.to_vec().iter().enumerate() {
+            for (_, &param) in params.to_vec().iter().enumerate() {
                 use Position::*;
                 match *move_type {
                     Absolute => pos.move_abs_y(param),
@@ -140,7 +140,7 @@ impl TryFrom<Data> for Shape {
             // Ensures that first command is a move
             if i == 0 {
                 if let Move(_, params) = command {
-                    if let (Some(_), Some(_)) = (params.get(0), params.get(1)) {
+                    if let (Some(_), Some(_)) = (params.first(), params.get(1)) {
                     } else {
                         return Err(NoFirstParamsError);
                     }

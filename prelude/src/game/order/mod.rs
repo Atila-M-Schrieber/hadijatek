@@ -26,5 +26,5 @@ struct Order {
 }
 
 trait Orderable: Debug {
-    fn legal(self: &Self, state: State) -> bool;
+    fn legal(&self, state: State) -> bool;
 }
