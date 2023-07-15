@@ -1,4 +1,4 @@
-# hadijatek_haskell
+# hadijatek
 
 Hadijáték is a Diplomacy-like game invented at BME's FEB camp.
 
