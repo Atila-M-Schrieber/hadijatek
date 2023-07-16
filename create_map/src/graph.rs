@@ -7,8 +7,10 @@ use prelude::{
     region::{Base, Border, Region},
 };
 
+use crate::read::PreRegion;
+
 pub fn graphify(
-    pre_regions: Vec<(String, Option<RefCell<Base>>, Shape, Color)>,
+    pre_regions: Vec<PreRegion>,
     water_color: Color,
 ) -> Result<Csr<Rc<Region>, Border, Undirected>> {
     todo!()

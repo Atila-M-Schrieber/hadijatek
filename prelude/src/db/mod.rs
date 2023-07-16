@@ -1,7 +1,7 @@
 use crate::State;
 
-mod read;
-mod write;
+pub mod read;
+pub mod write;
 
 pub trait Database {
     fn read_state(&self) -> State;

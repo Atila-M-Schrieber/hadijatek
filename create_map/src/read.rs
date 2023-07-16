@@ -16,6 +16,8 @@ use prelude::{
 
 use eyre::Result;
 
+pub type PreRegion = (String, Option<RefCell<Base>>, Shape, Color);
+
 macro_rules! print_flush {
     ($($arg:tt)*) => {{
         use std::io::Write;
@@ -88,12 +90,12 @@ pub fn get_path() -> Result<String> {
             );
             let mut c = [0; 1];
             io::stdin().read_exact(&mut c)?;
-            return match c[0] as char {
+            match c[0] as char {
                 '\n' => Ok(path),
                 _ => {
                     Err(io::Error::new(io::ErrorKind::NotFound, "Single file not selected").into())
                 }
-            };
+            }
         }
         0 => {
             println!(
@@ -103,7 +105,7 @@ pub fn get_path() -> Result<String> {
                 "No .svg files in this directory. Run this program where the map file is."
             ]
             );
-            return Err(io::Error::new(io::ErrorKind::NotFound, "No .svg file found.").into());
+            Err(io::Error::new(io::ErrorKind::NotFound, "No .svg file found.").into())
         }
         _ => {
             for (i, path) in &paths {
@@ -239,22 +241,11 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
     Ok(teams)
 }
 
-pub fn get_regions(
-    path: &str,
-    teams: &Vec<Rc<Team>>,
-) -> Result<Vec<(String, Option<RefCell<Base>>, Shape, Color)>> {
+pub fn get_regions(path: &str, teams: &[Rc<Team>]) -> Result<Vec<PreRegion>> {
     let mut content = String::new();
-
-    let mut stuff = Vec::new();
-    for event in svg::open(path, &mut content)? {
-        stuff.push(read_event(event, &teams));
-    }
-
-    let num_succ = stuff.iter().flatten().count();
-
-    println!("Succeded: {}, Failed: {}", num_succ, stuff.len() - num_succ);
-
-    todo!()
+    Ok(svg::open(path, &mut content)?
+        .filter_map(|event| read_event(event, teams).ok())
+        .collect())
 }
 
 pub fn get_db() -> Result<Box<dyn Database>> {
