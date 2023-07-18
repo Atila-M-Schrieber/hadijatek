@@ -7,6 +7,12 @@ use super::Point;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape(Vec<Point>);
 
+impl Shape {
+    pub fn points(&self) -> &[Point] {
+        &self.0
+    }
+}
+
 pub struct ShapeIter<'a> {
     shape: &'a Shape,
     index: usize,
@@ -33,43 +39,6 @@ impl<'a> Iterator for ShapeIter<'a> {
         result
     }
 }
-
-#[derive(Debug)]
-pub enum ShapeFromDataError {
-    FirstNotMoveError,
-    LastNotCloseError,
-    NonFirstMoveError(usize),
-    NoFirstParamsError,
-    EarlyCloseError,
-    UnsupportedCommandError(Command),
-    OddParamsErr(Command),
-    Impossible,
-}
-
-impl fmt::Display for ShapeFromDataError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use ShapeFromDataError::*;
-        match self {
-            FirstNotMoveError => write!(f, "First path command is not a move"),
-            LastNotCloseError => write!(f, "Last path command is not a close"),
-            NonFirstMoveError(pos) => write!(
-                f,
-                "The {pos}th command is a move, but only the first command can be a move"
-            ),
-            NoFirstParamsError => write!(f, "The first parameter(s) of a command can't be found"),
-            EarlyCloseError => write!(f, "There is a Close command too early in the SVG path"),
-            UnsupportedCommandError(cmd) => write!(f, "This command is unsupported: {:?}", cmd),
-            OddParamsErr(cmd) => write!(
-                f,
-                "This command type needs an even number of parameters: {:?}",
-                cmd
-            ),
-            Impossible => write!(f, "How???"),
-        }
-    }
-}
-
-impl error::Error for ShapeFromDataError {}
 
 fn push_command(
     command: &Command,
@@ -179,3 +148,40 @@ impl From<Shape> for Data {
         data.close()
     }
 }
+
+#[derive(Debug)]
+pub enum ShapeFromDataError {
+    FirstNotMoveError,
+    LastNotCloseError,
+    NonFirstMoveError(usize),
+    NoFirstParamsError,
+    EarlyCloseError,
+    UnsupportedCommandError(Command),
+    OddParamsErr(Command),
+    Impossible,
+}
+
+impl fmt::Display for ShapeFromDataError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use ShapeFromDataError::*;
+        match self {
+            FirstNotMoveError => write!(f, "First path command is not a move"),
+            LastNotCloseError => write!(f, "Last path command is not a close"),
+            NonFirstMoveError(pos) => write!(
+                f,
+                "The {pos}th command is a move, but only the first command can be a move"
+            ),
+            NoFirstParamsError => write!(f, "The first parameter(s) of a command can't be found"),
+            EarlyCloseError => write!(f, "There is a Close command too early in the SVG path"),
+            UnsupportedCommandError(cmd) => write!(f, "This command is unsupported: {:?}", cmd),
+            OddParamsErr(cmd) => write!(
+                f,
+                "This command type needs an even number of parameters: {:?}",
+                cmd
+            ),
+            Impossible => write!(f, "How???"),
+        }
+    }
+}
+
+impl error::Error for ShapeFromDataError {}
