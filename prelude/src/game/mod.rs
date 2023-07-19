@@ -27,4 +27,16 @@ impl State {
             units: RefCell::new(Vec::new()),
         }
     }
+
+    pub fn teams(&self) -> &[Rc<Team>] {
+        &self.teams
+    }
+
+    pub fn units(&self) -> &RefCell<Vec<Unit>> {
+        &self.units
+    }
+
+    pub fn regions(&self) -> &Csr<Rc<Region>, Border, Undirected> {
+        &self.regions
+    }
 }

@@ -1,9 +1,13 @@
-use crate::State;
+use eyre::Result;
 
-pub mod read;
-pub mod write;
+use crate::{draw::Color, State};
+
+// pub mod read;
+pub mod legacy;
 
 pub trait Database {
-    fn read_state(&self) -> State;
-    fn write_state(&mut self, state: State);
+    fn load(&self) -> Result<()>;
+    fn write(&self) -> Result<()>;
+    fn to_state(&self) -> Result<State>;
+    fn read_from_state(&mut self, state: State) -> Result<()>;
 }

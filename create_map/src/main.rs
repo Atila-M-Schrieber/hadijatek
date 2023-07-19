@@ -1,6 +1,5 @@
 mod map;
 mod read;
-mod write;
 
 use std::io;
 
@@ -9,7 +8,6 @@ use prelude::{draw::Color, lang, lang::Language, lang::LANGUAGE, State};
 
 use crate::map::*;
 use crate::read::*;
-use crate::write::*;
 
 fn main() -> Result<()> {
     get_lang()?;
@@ -33,9 +31,10 @@ fn main() -> Result<()> {
     let map = mapify(pre_regions, water_color)?;
     let state = State::new(teams, map);
 
-    let db = get_db()?;
+    let mut db = get_db()?;
 
-    write_state(state, db)?;
+    db.read_from_state(state)?;
+    db.write()?;
 
     Ok(())
 }

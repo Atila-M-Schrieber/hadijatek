@@ -35,6 +35,9 @@ impl Base {
     pub fn set(&mut self, team: Rc<Team>) {
         self.owner = Some(Rc::clone(&team))
     }
+    pub fn owner(&self) -> Option<Rc<Team>> {
+        self.owner.as_ref().map(Rc::clone)
+    }
 }
 
 impl Default for Base {
@@ -84,6 +87,12 @@ impl Region {
 
     pub fn has_base(&self) -> bool {
         self.base.is_some()
+    }
+
+    pub fn owner(&self) -> Option<Rc<Team>> {
+        self.base
+            .as_ref()
+            .and_then(|r_base| r_base.borrow().owner())
     }
 
     pub fn shape(&self) -> &Shape {
