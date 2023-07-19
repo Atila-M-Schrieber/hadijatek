@@ -1,7 +1,7 @@
-use std::{cell::RefCell, error, fmt, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, error, fmt, rc::Rc};
 
 use eyre::Result;
-use petgraph::{csr::Csr, Undirected};
+use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use prelude::{
     draw::{Color, Point, Shape},
     region::{Base, Border, Region, RegionType},
@@ -52,15 +52,6 @@ fn are_neighboring_shapes(shapes: &[&Shape]) -> bool {
     are_neighbors
 }
 
-/// Returns the region type of a (pre)region, so it can then be classified
-fn classify(
-    (_, _, shape, color): &PreRegion,
-    others: &Csr<PreRegion, (), Undirected>,
-    water_color: Color,
-) -> RegionType {
-    todo!()
-}
-
 /// Simply constructs a graph of all PreRegions
 fn graphify(pre_regions: Vec<PreRegion>) -> Result<Csr<PreRegion, (), Undirected>> {
     let mut graph: Csr<PreRegion, (), Undirected> = Csr::new();
@@ -88,12 +79,118 @@ fn graphify(pre_regions: Vec<PreRegion>) -> Result<Csr<PreRegion, (), Undirected
     Ok(graph)
 }
 
+/// Turns pre-regions into full regions
+fn to_full_regions(
+    graph: Csr<PreRegion, (), Undirected>,
+    water_color: Color,
+) -> Result<Csr<Rc<Region>, Border, Undirected>> {
+    let mut new_graph: Csr<Rc<Region>, Border, Undirected> = Csr::new();
+    let mut new_indeces: Vec<_> = Vec::new();
+
+    for (i, (name, base, shape, color)) in graph.node_references() {
+        use RegionType::*;
+        let mut rtype = Land;
+        if color == &water_color {
+            rtype = Sea;
+        } else if let (true, _) = strait(shape) {
+            rtype = Strait;
+        } else if graph.neighbors_slice(i).iter().any(|&i| {
+            let (_, _, _, color) = graph[i];
+            color == water_color
+        }) {
+            rtype = Shore
+        }
+        let new_i = new_graph.add_node(Rc::new(Region::new(
+            name.clone(),
+            rtype,
+            base.clone(),
+            shape.clone(),
+            *color,
+        )?));
+        new_indeces.push(new_i);
+        if new_i != i {
+            println!("bruh");
+        }
+    }
+
+    // should probably check sorted-ness
+    for (i, _) in graph.node_references() {
+        let i_old_neighbors = graph.neighbors_slice(i);
+        let i_neighbors: Vec<_> = i_old_neighbors
+            .iter()
+            .map(|&j| new_indeces[j as usize])
+            .collect();
+        for &j in i_old_neighbors.iter().filter(|&&j| j > i) {
+            let j_neighbors: Vec<_> = graph
+                .neighbors_slice(j)
+                .iter()
+                .map(|&k| new_indeces[k as usize])
+                .collect();
+            let mut common_neighbors = Vec::new();
+            for &l in &i_neighbors {
+                if j_neighbors.contains(&l) {
+                    common_neighbors.push(Rc::clone(&new_graph[new_indeces[l as usize]]));
+                }
+            }
+            // let common_neighbors
+            let new_i = new_indeces[i as usize];
+            let new_j = new_indeces[j as usize];
+            new_graph.add_edge(
+                new_i,
+                new_j,
+                get_border(
+                    Rc::clone(&new_graph[new_i]),
+                    Rc::clone(&new_graph[new_j]),
+                    &common_neighbors,
+                ),
+            );
+        }
+    }
+
+    assert_eq!(graph.node_count(), new_graph.node_count());
+    assert_eq!(graph.edge_count(), new_graph.edge_count());
+
+    Ok(new_graph)
+}
+
+/// Classifies the border between two regions
+/// If i != i_old then must map
+fn get_border(r1: Rc<Region>, r2: Rc<Region>, common_neighbors: &[Rc<Region>]) -> Border {
+    use Border as B;
+    use RegionType::*;
+    match (r1.region_type(), r2.region_type()) {
+        (Land, _) | (_, Land) => B::Land,
+        (Sea, Sea) => {
+            // check for strait
+            if let Some(strait) = common_neighbors.iter().find(|&region| {
+                strait(region.shape()).0
+                    && are_neighboring_shapes(&[region.shape(), r1.shape(), r2.shape()])
+            }) {
+                return B::Strait(Rc::clone(strait));
+            }
+            B::Sea
+        }
+        (Sea, _) | (_, Sea) => B::Sea,
+        (Shore, Shore) | (Shore, Strait) | (Strait, Shore) | (Strait, Strait) => {
+            // check if wo'ah traversible
+            if common_neighbors.iter().any(|region| {
+                region.region_type() == Sea
+                    && are_neighboring_shapes(&[region.shape(), r1.shape(), r2.shape()])
+            }) {
+                return B::Shore;
+            }
+            B::Land
+        }
+    }
+}
+
 pub fn mapify(
     pre_regions: Vec<PreRegion>,
     water_color: Color,
 ) -> Result<Csr<Rc<Region>, Border, Undirected>> {
     let graph = graphify(pre_regions)?;
-    todo!()
+    let graph = to_full_regions(graph, water_color)?;
+    Ok(graph)
 }
 
 #[derive(Debug)]

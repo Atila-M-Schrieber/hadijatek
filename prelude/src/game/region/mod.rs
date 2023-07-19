@@ -23,7 +23,7 @@ pub enum Border {
     Sea,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Base {
     owner: Option<Rc<Team>>,
 }
@@ -72,5 +72,25 @@ impl Region {
             shape,
             color,
         })
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn region_type(&self) -> RegionType {
+        self.region_type
+    }
+
+    pub fn has_base(&self) -> bool {
+        self.base.is_some()
+    }
+
+    pub fn shape(&self) -> &Shape {
+        &self.shape
+    }
+
+    pub fn color(&self) -> Color {
+        self.color
     }
 }
