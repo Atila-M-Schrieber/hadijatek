@@ -1,5 +1,7 @@
 // use std::{error, fmt, num::ParseFloatError, str::FromStr};
 
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use svg::node::element::path::Parameters;
 
@@ -9,6 +11,10 @@ pub struct Point(f32, f32);
 impl Point {
     pub fn new(x: f32, y: f32) -> Self {
         Point(x, y)
+    }
+
+    pub fn get(self) -> (f32, f32) {
+        (self.0, self.1)
     }
 
     pub fn move_abs(&mut self, x: f32, y: f32) {
@@ -60,6 +66,12 @@ impl From<Vec<Point>> for MyParameters {
 impl From<MyParameters> for Parameters {
     fn from(why: MyParameters) -> Parameters {
         why.0
+    }
+}
+
+impl Display for Point {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({},{})", self.0, self.1)
     }
 }
 

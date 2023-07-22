@@ -2,6 +2,7 @@ use std::fs;
 use std::rc::Rc;
 
 use crate::lang;
+use crate::region::{Region, RegionType};
 use crate::{draw::Color, lang::Language, lang::LANGUAGE, team::Team, State};
 
 use super::Database;
@@ -49,18 +50,35 @@ impl Database for Legacy {
                 .regions()
                 .node_references()
                 .filter(|(_, region)| (region.owner() == Some(Rc::clone(team))))
-                .fold("".to_owned(), |p_str, (i, region)| {
+                .map(|(i, region)| {
                     let tf = if region.color() == team.color() {
                         "True"
                     } else {
                         "False"
                     };
-                    p_str + format!(",({i},{})", tf).as_str()
-                });
+                    format!("({},{})", i, /* region.name(), */ tf)
+                })
+                .join(",");
             format!("{i},\"{}\",\"{}\",[{}]", team.name(), team.color(), bases)
         };
 
-        // TODO add units & regions
+        let region_to_entry = |(i, region): (u32, &Rc<Region>)| {
+            use RegionType::*;
+            let tp = match region.region_type() {
+                Sea => 0,
+                _ => 1 + region.has_base() as u32,
+            };
+            format!(
+                "{i},{},\"{}\",\"{}\",{},{}",
+                tp,
+                region.name(),
+                region.color(),
+                region.shape().points().first().unwrap(),
+                region.shape()
+            )
+        };
+
+        // TODO add units
 
         self.content = prelude
             + "\n---\n"
@@ -70,6 +88,13 @@ impl Database for Legacy {
                 .sorted_by_key(|t| t.name())
                 .enumerate()
                 .map(team_to_entry)
+                .join("\n")
+            + "\n---\n"
+            + "---\n"
+            + &state
+                .regions()
+                .node_references()
+                .map(region_to_entry)
                 .join("\n");
 
         Ok(())

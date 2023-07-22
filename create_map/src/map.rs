@@ -1,6 +1,7 @@
 use std::{error, fmt, rc::Rc};
 
 use eyre::Result;
+use itertools::Itertools;
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use prelude::{
     draw::{Color, Point, Shape},
@@ -108,14 +109,9 @@ fn to_full_regions(
         )?));
     }
 
-    // should probably check sorted-ness
     for (i, _) in graph.node_references() {
-        dbg!(i);
         let i_neighbors = graph.neighbors_slice(i);
-        for &j in i_neighbors.iter()
-        /* .filter(|&&j| j > i) */
-        {
-            dbg!(j);
+        for &j in i_neighbors.iter() {
             let j_neighbors: Vec<_> = graph
                 .neighbors_slice(j)
                 .iter()
@@ -138,6 +134,15 @@ fn to_full_regions(
                 ),
             );
         }
+        println!(
+            "{}: {}",
+            &new_graph[i].name(),
+            &new_graph
+                .neighbors_slice(i)
+                .iter()
+                .map(|&j| new_graph[j].name().to_string())
+                .join(", ")
+        )
     }
 
     assert_eq!(graph.node_count(), new_graph.node_count());

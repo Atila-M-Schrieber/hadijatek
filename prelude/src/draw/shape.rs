@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::{error, fmt};
+use std::{
+    error,
+    fmt::{self, Display},
+};
 use svg::node::element::path::{Command, Data, Position};
 
 use super::Point;
@@ -10,6 +13,16 @@ pub struct Shape(Vec<Point>);
 impl Shape {
     pub fn points(&self) -> &[Point] {
         &self.0
+    }
+}
+
+impl Display for Shape {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "\"")?;
+        for point in self.points() {
+            write!(f, "M {},{} ", point.get().0, point.get().1)?;
+        }
+        write!(f, "Z\"")
     }
 }
 

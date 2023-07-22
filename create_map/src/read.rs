@@ -248,9 +248,11 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
 
 pub fn get_regions(path: &str, teams: &[Rc<Team>]) -> Result<Vec<PreRegion>> {
     let mut content = String::new();
-    Ok(svg::open(path, &mut content)?
+    let mut pre_regs = svg::open(path, &mut content)?
         .filter_map(|event| read_event(event, teams).ok())
-        .collect())
+        .collect::<Vec<_>>();
+    pre_regs.sort_by_key(|(name, _, _, _, _)| name.clone());
+    Ok(pre_regs)
 }
 
 pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Box<dyn Database>> {
@@ -260,17 +262,17 @@ pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Box
         "To use the default (SurrealDB) database, press enter. To output to legacy .hmap file, press \"L\""
         ]);
 
-    let mut c = [0; 1];
-    io::stdin().read_exact(&mut c)?;
+    let mut s = String::new();
+    io::stdin().read_line(&mut s)?;
 
-    let _legacy = match c[0] as char {
-        '\n' => Err(eyre!("db not implemented")),
-        'L' => Ok(true),
+    let _legacy = match s.chars().next() {
+        Some('\n') => Err(eyre!("db not implemented")),
+        Some('L') => Ok(true),
         _ => Err(eyre!("No such db")),
     }?;
 
     // path will be .svg, so this is ok
-    let mut name = path
+    let mut name = path[2..]
         .split_once('.')
         .unzip()
         .0
@@ -285,7 +287,7 @@ pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Box
         ]
     );
 
-    let mut s = String::new();
+    s.clear();
     io::stdin().read_line(&mut s)?;
 
     if s != "\n" {
