@@ -123,7 +123,7 @@ fn to_full_regions(
                     common_neighbors.push(Rc::clone(&new_graph[l]));
                 }
             }
-            // let common_neighbors
+
             new_graph.add_edge(
                 i,
                 j,
