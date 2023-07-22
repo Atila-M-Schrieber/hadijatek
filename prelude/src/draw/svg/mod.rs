@@ -12,10 +12,9 @@ use crate::team::Team;
 
 mod error;
 
-pub fn read_event(
-    event: Event<'_>,
-    teams: &[Rc<Team>],
-) -> Result<(String, Option<RefCell<Base>>, Shape, Color)> {
+type PreRegion = (String, Option<RefCell<Base>>, Shape, Color, Color);
+
+pub fn read_event(event: Event<'_>, teams: &[Rc<Team>]) -> Result<PreRegion> {
     use error::ReadEventError::*;
     if let Event::Tag("path", _, attributes) = event {
         let name = attributes.get("inkscape:label").ok_or(NoName)?.to_string();
@@ -53,7 +52,7 @@ pub fn read_event(
         let data = Data::parse(attributes.get("d").ok_or(NoDAttribute)?)?;
         let shape: Shape = data.try_into()?;
 
-        return Ok((name, base, shape, color));
+        return Ok((name, base, shape, color, stroke_color));
     }
     Err(NoPath.into())
 }

@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::{io, rc::Rc};
 
+use prelude::db::legacy::Legacy;
 use prelude::draw::Shape;
 use prelude::lang;
 use prelude::region::Base;
@@ -14,9 +15,10 @@ use prelude::{
     team::Team,
 };
 
+use eyre::eyre;
 use eyre::Result;
 
-pub type PreRegion = (String, Option<RefCell<Base>>, Shape, Color);
+pub type PreRegion = (String, Option<RefCell<Base>>, Shape, Color, Color);
 
 macro_rules! print_flush {
     ($($arg:tt)*) => {{
@@ -204,19 +206,22 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
     let mut teams = Vec::new();
     loop {
         print_flush!("{}", lang!["A csapat neve: ", "The name of the team: "]);
+        s.clear();
         io::stdin().read_line(&mut s)?;
-        let name = s.clone();
+        let name = s.clone().trim().to_string();
 
-        if s.is_empty() {
+        dbg!(&name);
+        if s == "\n" {
             break;
         }
 
         print_flush!("{}", lang!["A csapat színe: ", "The team's color: "]);
+        s.clear();
         io::stdin().read_line(&mut s)?;
 
         let color;
         loop {
-            if let Ok(col) = s.parse::<Color>() {
+            if let Ok(col) = s.trim().parse::<Color>() {
                 color = col;
                 break;
             }
@@ -248,6 +253,48 @@ pub fn get_regions(path: &str, teams: &[Rc<Team>]) -> Result<Vec<PreRegion>> {
         .collect())
 }
 
-pub fn get_db() -> Result<Box<dyn Database>> {
-    todo!()
+pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Box<dyn Database>> {
+    print_flush!("{}: ",
+        lang![
+        "Standard (SurrealDB) használatához nyomj entert, régi .hmap-ba kiíráshoz írdd be, hogy \"L\"",
+        "To use the default (SurrealDB) database, press enter. To output to legacy .hmap file, press \"L\""
+        ]);
+
+    let mut c = [0; 1];
+    io::stdin().read_exact(&mut c)?;
+
+    let _legacy = match c[0] as char {
+        '\n' => Err(eyre!("db not implemented")),
+        'L' => Ok(true),
+        _ => Err(eyre!("No such db")),
+    }?;
+
+    // path will be .svg, so this is ok
+    let mut name = path
+        .split_once('.')
+        .unzip()
+        .0
+        .ok_or(eyre!("How could this happen to me?"))?;
+
+    print_flush!(
+        "\"{}\" {}: ",
+        name,
+        lang![
+            "lesz az alapértelmezett név, ha megfelel, nyomj entert, ha nem, írj új nevet",
+            "will be the default name, if this is correct, press Enter, if not, write a new name"
+        ]
+    );
+
+    let mut s = String::new();
+    io::stdin().read_line(&mut s)?;
+
+    if s != "\n" {
+        name = s.trim();
+    }
+
+    Ok(Box::new(Legacy::new(
+        name.to_owned(),
+        water_stroke,
+        land_stroke,
+    )))
 }

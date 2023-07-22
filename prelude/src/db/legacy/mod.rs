@@ -18,10 +18,22 @@ pub struct Legacy {
     content: String,
 }
 
+impl Legacy {
+    pub fn new(name: String, water_stroke: Color, land_stroke: Color) -> Legacy {
+        Legacy {
+            name,
+            turn: 0,
+            water_stroke,
+            land_stroke,
+            content: String::new(),
+        }
+    }
+}
+
 impl Database for Legacy {
     fn read_from_state(&mut self, state: State) -> Result<()> {
         let prelude = format!(
-            "{}: {}\n{}: {}\n{}: {}\n{}: {}\n",
+            "{}: {}\n{}: {}\n{}: {}\n{}: {}",
             lang!["Név", "Name"],
             self.name,
             lang!["Lépések", "Steps"],
@@ -48,6 +60,8 @@ impl Database for Legacy {
             format!("{i},\"{}\",\"{}\",[{}]", team.name(), team.color(), bases)
         };
 
+        // TODO add units & regions
+
         self.content = prelude
             + "\n---\n"
             + &state
@@ -68,7 +82,8 @@ impl Database for Legacy {
     fn write(&self) -> Result<()> {
         let filename = format!("{}_{}.hmap", self.name, self.turn);
 
-        todo!()
+        fs::write(filename, &self.content)?;
+        Ok(())
     }
 
     fn load(&self) -> Result<()> {

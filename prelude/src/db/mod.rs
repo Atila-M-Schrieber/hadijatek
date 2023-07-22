@@ -1,6 +1,6 @@
 use eyre::Result;
 
-use crate::{draw::Color, State};
+use crate::State;
 
 // pub mod read;
 pub mod legacy;

@@ -1,10 +1,10 @@
-use std::{cell::RefCell, collections::HashSet, error, fmt, rc::Rc};
+use std::{error, fmt, rc::Rc};
 
 use eyre::Result;
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use prelude::{
     draw::{Color, Point, Shape},
-    region::{Base, Border, Region, RegionType},
+    region::{Border, Region, RegionType},
 };
 
 use crate::read::PreRegion;
@@ -59,8 +59,8 @@ fn graphify(pre_regions: Vec<PreRegion>) -> Result<Csr<PreRegion, (), Undirected
 
     for &i in indeces.iter() {
         for &j in indeces.iter().skip(i as usize) {
-            let (_, _, s1, _) = &graph[i];
-            let (_, _, s2, _) = &graph[j];
+            let s1 = &graph[i].2;
+            let s2 = &graph[j].2;
             let ss = vec![s1, s2];
             if are_neighboring_shapes(&ss) {
                 graph.add_edge(i, j, ());
@@ -71,7 +71,7 @@ fn graphify(pre_regions: Vec<PreRegion>) -> Result<Csr<PreRegion, (), Undirected
 
     for &i in indeces.iter() {
         if graph.neighbors_slice(i).is_empty() {
-            let (_, _, s, _) = &graph[i];
+            let s = &graph[i].2;
             return Err(UnconnectedRegionError(s.clone()).into());
         }
     }
@@ -85,9 +85,8 @@ fn to_full_regions(
     water_color: Color,
 ) -> Result<Csr<Rc<Region>, Border, Undirected>> {
     let mut new_graph: Csr<Rc<Region>, Border, Undirected> = Csr::new();
-    let mut new_indeces: Vec<_> = Vec::new();
 
-    for (i, (name, base, shape, color)) in graph.node_references() {
+    for (i, (name, base, shape, color, _)) in graph.node_references() {
         use RegionType::*;
         let mut rtype = Land;
         if color == &water_color {
@@ -95,52 +94,46 @@ fn to_full_regions(
         } else if let (true, _) = strait(shape) {
             rtype = Strait;
         } else if graph.neighbors_slice(i).iter().any(|&i| {
-            let (_, _, _, color) = graph[i];
+            let color = graph[i].3;
             color == water_color
         }) {
             rtype = Shore
         }
-        let new_i = new_graph.add_node(Rc::new(Region::new(
+        new_graph.add_node(Rc::new(Region::new(
             name.clone(),
             rtype,
             base.clone(),
             shape.clone(),
             *color,
         )?));
-        new_indeces.push(new_i);
-        if new_i != i {
-            println!("bruh");
-        }
     }
 
     // should probably check sorted-ness
     for (i, _) in graph.node_references() {
-        let i_old_neighbors = graph.neighbors_slice(i);
-        let i_neighbors: Vec<_> = i_old_neighbors
-            .iter()
-            .map(|&j| new_indeces[j as usize])
-            .collect();
-        for &j in i_old_neighbors.iter().filter(|&&j| j > i) {
+        dbg!(i);
+        let i_neighbors = graph.neighbors_slice(i);
+        for &j in i_neighbors.iter()
+        /* .filter(|&&j| j > i) */
+        {
+            dbg!(j);
             let j_neighbors: Vec<_> = graph
                 .neighbors_slice(j)
                 .iter()
-                .map(|&k| new_indeces[k as usize])
+                // .map(|&k| new_indeces[k as usize])
                 .collect();
             let mut common_neighbors = Vec::new();
-            for &l in &i_neighbors {
-                if j_neighbors.contains(&l) {
-                    common_neighbors.push(Rc::clone(&new_graph[new_indeces[l as usize]]));
+            for &l in i_neighbors {
+                if j_neighbors.contains(&&l) {
+                    common_neighbors.push(Rc::clone(&new_graph[l]));
                 }
             }
             // let common_neighbors
-            let new_i = new_indeces[i as usize];
-            let new_j = new_indeces[j as usize];
             new_graph.add_edge(
-                new_i,
-                new_j,
+                i,
+                j,
                 get_border(
-                    Rc::clone(&new_graph[new_i]),
-                    Rc::clone(&new_graph[new_j]),
+                    Rc::clone(&new_graph[i]),
+                    Rc::clone(&new_graph[j]),
                     &common_neighbors,
                 ),
             );
@@ -184,6 +177,7 @@ fn get_border(r1: Rc<Region>, r2: Rc<Region>, common_neighbors: &[Rc<Region>]) -
     }
 }
 
+/// Turns a list of PreRegions into a complete map
 pub fn mapify(
     pre_regions: Vec<PreRegion>,
     water_color: Color,
