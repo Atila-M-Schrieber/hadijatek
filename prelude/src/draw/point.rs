@@ -49,26 +49,6 @@ impl From<Point> for Parameters {
     }
 }
 
-// Why the fuck is this necessary. Damn orphan rule.
-pub struct MyParameters(Parameters);
-
-impl From<Vec<Point>> for MyParameters {
-    fn from(points: Vec<Point>) -> MyParameters {
-        let mut vec = Vec::new();
-        for Point(x, y) in points {
-            vec.push(x);
-            vec.push(y);
-        }
-        MyParameters(vec.into())
-    }
-}
-
-impl From<MyParameters> for Parameters {
-    fn from(why: MyParameters) -> Parameters {
-        why.0
-    }
-}
-
 impl Display for Point {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({},{})", self.0, self.1)

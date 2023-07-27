@@ -3,7 +3,7 @@ use std::{
     error,
     fmt::{self, Display},
 };
-use svg::node::element::path::{Command, Data, Position};
+use svg::node::element::path::{Command, Data, Parameters, Position};
 
 use super::Point;
 
@@ -192,12 +192,22 @@ impl From<Shape> for Vec<Point> {
     }
 }
 
+impl From<Shape> for Parameters {
+    fn from(shape: Shape) -> Self {
+        let mut vec = Vec::new();
+        for (x, y) in shape.points().iter().map(|p| p.get()) {
+            vec.push(x);
+            vec.push(y);
+        }
+        vec.into()
+    }
+}
+
 impl From<Shape> for Data {
     /// Subject to future optimization, currently is always just one big move (absolute) command
     fn from(shape: Shape) -> Data {
         let mut data = Data::new();
-        let vec: Vec<_> = shape.into();
-        data = data.move_to(super::point::MyParameters::from(vec));
+        data = data.move_to::<Parameters>(shape.into());
         data.close()
     }
 }
