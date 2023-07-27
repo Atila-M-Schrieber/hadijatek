@@ -1,6 +1,6 @@
 # hadijatek
 
-Hadijáték is a Diplomacy-like game invented at BME's FEB camp.
+Hadijáték is a Diplomacy-like game invented at BME VeBio's FEB camp.
 
 This project was started after playing a trial game with the old Haskell version,
 which was full of bugs, and was hard to manage.
