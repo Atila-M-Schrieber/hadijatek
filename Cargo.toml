@@ -4,5 +4,5 @@ members = [
 	"prelude",
 	"create_map",
 	"webui",
-	"executor",
+	"adjudicator",
 ]
