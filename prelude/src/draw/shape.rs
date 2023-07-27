@@ -14,6 +14,46 @@ impl Shape {
     pub fn points(&self) -> &[Point] {
         &self.0
     }
+
+    pub fn new(points: &[Point]) -> Self {
+        Shape(points.to_owned())
+    }
+}
+
+pub trait Contains<T> {
+    fn contains(&self, internal: &T) -> bool;
+}
+
+impl Contains<&Point> for &Shape {
+    fn contains(&self, internal: &&Point) -> bool {
+        // logic
+        let points = self.points();
+        let len = points.len();
+        let (x3, y3) = internal.get();
+
+        let mut contains = false;
+        for i in 0..len {
+            let j = (i + 1) % len;
+            let (x1, y1) = points[i].get();
+            let (x2, y2) = points[j].get();
+            // let x4 = f32::min(x1, f32::min(x2, x3));
+            let x4 = 0.;
+            let y4 = y3;
+            let divisor = (x1 - x2) * (y3 - y4) - (x3 - x4) * (y1 - y2);
+            let t = ((x1 - x3) * (y3 - y4) - (x3 - x4) * (y1 - y3)) / divisor;
+            let u = ((x1 - x3) * (y1 - y2) - (x1 - x2) * (y1 - y3)) / divisor;
+            let crosses = (0. ..=1.).contains(&u) && (0. ..=1.).contains(&t);
+            // if crosses, flip the value of contains (XOR)
+            contains ^= crosses
+        }
+        contains
+    }
+}
+
+impl Contains<&Shape> for &Shape {
+    fn contains(&self, internal: &&Shape) -> bool {
+        internal.points().iter().all(|p| self.contains(&p))
+    }
 }
 
 impl Display for Shape {

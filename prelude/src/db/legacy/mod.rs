@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::lang;
 use crate::region::{Region, RegionType};
+use crate::unit::Unit;
 use crate::{draw::Color, lang::Language, lang::LANGUAGE, team::Team, State};
 
 use super::Database;
@@ -62,6 +63,8 @@ impl Database for Legacy {
             format!("{i},\"{}\",\"{}\",[{}]", team.name(), team.color(), bases)
         };
 
+        let unit_to_entry = |(_i, _unit): (usize, &Unit)| -> String { todo!() };
+
         let region_to_entry = |(i, region): (u32, &Rc<Region>)| {
             use RegionType::*;
             let tp = match region.region_type() {
@@ -90,6 +93,13 @@ impl Database for Legacy {
                 .map(team_to_entry)
                 .join("\n")
             + "\n---\n"
+            + &state
+                .units()
+                .borrow()
+                .iter()
+                .enumerate()
+                .map(unit_to_entry)
+                .join("\n")
             + "---\n"
             + &state
                 .regions()

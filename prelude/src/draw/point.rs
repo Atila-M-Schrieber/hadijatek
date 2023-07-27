@@ -27,7 +27,7 @@ impl Point {
     }
 
     pub fn move_abs_y(&mut self, y: f32) {
-        self.0 = y;
+        self.1 = y;
     }
 
     pub fn move_rel(&mut self, x: f32, y: f32) {

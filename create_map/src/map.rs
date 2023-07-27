@@ -4,7 +4,7 @@ use eyre::Result;
 use itertools::Itertools;
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use prelude::{
-    draw::{Color, Point, Shape},
+    draw::{Color, Contains, Point, Shape},
     region::{Border, Region, RegionType},
 };
 
@@ -16,11 +16,20 @@ fn strait(shape: &Shape) -> (bool, &[Point]) {
     let points = shape.points();
     // By default reference to empty slice
     let mut strait_points = &points[0..0];
+
+    // needed because when checking for strait borders, are_neighboring_shapes checks for the
+    // number of straits, in the shapes, including the 2-length shape of the strait itself, which
+    // caused an underflow subtraction in the for loop.
+    if points.len() < 3 {
+        return (false, &[]);
+    }
     for i in 0..points.len() - 3 {
         let (p1, p2) = (points[i], points[i + 1]);
         for j in i..points.len() - 1 {
             let (p3, p4) = (points[j], points[j + 1]);
             if p1 == p4 && p2 == p3 {
+                assert_ne!(p1, p2, "Duplicate points detected");
+                assert_ne!(p3, p4, "Duplicate points detected");
                 assert_eq!(
                     strait_points.len(),
                     0,
@@ -37,20 +46,18 @@ fn strait(shape: &Shape) -> (bool, &[Point]) {
 
 /// Returns true if all shapes in the slice have points in common
 fn are_neighboring_shapes(shapes: &[&Shape]) -> bool {
-    let mut are_neighbors = true;
-    'outer: for (i, shape1) in shapes.iter().enumerate() {
-        for shape2 in shapes.iter().skip(i + 1) {
-            are_neighbors = are_neighbors
-                && shape1
-                    .into_iter()
-                    .any(|p| shape2.into_iter().collect::<Vec<_>>().contains(&p));
-            if !are_neighbors {
-                break 'outer;
+    let mut common = Vec::new();
+    let len: usize = shapes.iter().map(|s| s.points().len()).sum();
+    // needed because straits are self-intersecting
+    let num_straits = shapes.iter().filter(|s| strait(s).0).count();
+    for shape in shapes {
+        for point in shape.points() {
+            if !common.contains(point) {
+                common.push(*point);
             }
         }
     }
-
-    are_neighbors
+    common.len() != len - 2 * num_straits
 }
 
 /// Simply constructs a graph of all PreRegions
@@ -59,21 +66,21 @@ fn graphify(pre_regions: Vec<PreRegion>) -> Result<Csr<PreRegion, (), Undirected
     let indeces: Vec<_> = pre_regions.into_iter().map(|n| graph.add_node(n)).collect();
 
     for &i in indeces.iter() {
-        for &j in indeces.iter().skip(i as usize) {
+        for &j in indeces.iter()
+        /* .skip(i as usize + 1) // excluded for island regions */
+        {
+            if j == i {
+                continue;
+            }
             let s1 = &graph[i].2;
             let s2 = &graph[j].2;
             let ss = vec![s1, s2];
-            if are_neighboring_shapes(&ss) {
+            if are_neighboring_shapes(&ss) || s1.contains(&s2) || s2.contains(&s1) {
                 graph.add_edge(i, j, ());
             }
-            // NEED TO CHECK FOR INTERNAL (ISLAND-LIKE) REGIONS
         }
-    }
-
-    for &i in indeces.iter() {
         if graph.neighbors_slice(i).is_empty() {
-            let s = &graph[i].2;
-            return Err(UnconnectedRegionError(s.clone()).into());
+            return Err(UnconnectedRegionError(graph[i].0.clone()).into());
         }
     }
 
@@ -89,17 +96,19 @@ fn to_full_regions(
 
     for (i, (name, base, shape, color, _)) in graph.node_references() {
         use RegionType::*;
-        let mut rtype = Land;
-        if color == &water_color {
-            rtype = Sea;
+        let rtype = if color == &water_color {
+            Sea
         } else if let (true, _) = strait(shape) {
-            rtype = Strait;
-        } else if graph.neighbors_slice(i).iter().any(|&i| {
-            let color = graph[i].3;
-            color == water_color
-        }) {
-            rtype = Shore
-        }
+            Strait
+        } else if graph
+            .neighbors_slice(i)
+            .iter()
+            .any(|&i| graph[i].3 == water_color)
+        {
+            Shore
+        } else {
+            Land
+        };
         new_graph.add_node(Rc::new(Region::new(
             name.clone(),
             rtype,
@@ -112,11 +121,7 @@ fn to_full_regions(
     for (i, _) in graph.node_references() {
         let i_neighbors = graph.neighbors_slice(i);
         for &j in i_neighbors.iter() {
-            let j_neighbors: Vec<_> = graph
-                .neighbors_slice(j)
-                .iter()
-                // .map(|&k| new_indeces[k as usize])
-                .collect();
+            let j_neighbors: Vec<_> = graph.neighbors_slice(j).iter().collect();
             let mut common_neighbors = Vec::new();
             for &l in i_neighbors {
                 if j_neighbors.contains(&&l) {
@@ -124,15 +129,18 @@ fn to_full_regions(
                 }
             }
 
-            new_graph.add_edge(
-                i,
-                j,
-                get_border(
-                    Rc::clone(&new_graph[i]),
-                    Rc::clone(&new_graph[j]),
-                    &common_neighbors,
-                ),
-            );
+            // if cuts down on inefficiency of strait-checking
+            if !new_graph.contains_edge(i, j) {
+                new_graph.add_edge(
+                    i,
+                    j,
+                    get_border(
+                        Rc::clone(&new_graph[i]),
+                        Rc::clone(&new_graph[j]),
+                        &common_neighbors,
+                    ),
+                );
+            }
         }
         println!(
             "{}: {}",
@@ -152,7 +160,6 @@ fn to_full_regions(
 }
 
 /// Classifies the border between two regions
-/// If i != i_old then must map
 fn get_border(r1: Rc<Region>, r2: Rc<Region>, common_neighbors: &[Rc<Region>]) -> Border {
     use Border as B;
     use RegionType::*;
@@ -160,10 +167,24 @@ fn get_border(r1: Rc<Region>, r2: Rc<Region>, common_neighbors: &[Rc<Region>]) -
         (Land, _) | (_, Land) => B::Land,
         (Sea, Sea) => {
             // check for strait
-            if let Some(strait) = common_neighbors.iter().find(|&region| {
-                strait(region.shape()).0
-                    && are_neighboring_shapes(&[region.shape(), r1.shape(), r2.shape()])
-            }) {
+            if let Some(strait) = common_neighbors
+                .iter()
+                // cuts down on inefficiency of counting neighborings
+                .filter(|&region| region.region_type() == Strait)
+                .find(|&region| {
+                    are_neighboring_shapes(&[
+                        &Shape::new(strait(region.shape()).1),
+                        r1.shape(),
+                        r2.shape(),
+                    ])
+                })
+            {
+                println!(
+                    "Strait ({}) detected between {} and {}",
+                    strait.name(),
+                    r1.name(),
+                    r2.name()
+                );
                 return B::Strait(Rc::clone(strait));
             }
             B::Sea
@@ -193,15 +214,11 @@ pub fn mapify(
 }
 
 #[derive(Debug)]
-pub struct UnconnectedRegionError(Shape);
+pub struct UnconnectedRegionError(String);
 
 impl fmt::Display for UnconnectedRegionError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Region of the following shape is not connected to anything else: {:?}",
-            self.0
-        )
+        write!(f, "Region is not connected to anything else: {:?}", self.0)
     }
 }
 

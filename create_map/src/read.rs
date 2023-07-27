@@ -210,6 +210,17 @@ pub fn get_teams(path: &str) -> Result<Vec<Rc<Team>>> {
         io::stdin().read_line(&mut s)?;
         let name = s.clone().trim().to_string();
 
+        if teams.iter().any(|t: &Team| t.name() == &name) {
+            println!(
+                "{}",
+                lang![
+                    "Két csapatnak nem lehet azonos neve!",
+                    "Team names must be unique!"
+                ]
+            );
+            continue;
+        }
+
         dbg!(&name);
         if s == "\n" {
             break;

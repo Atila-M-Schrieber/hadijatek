@@ -15,6 +15,7 @@ fn main() -> Result<()> {
 
     let path = get_path()?;
 
+    // maybe add auto-detection of water_color
     print!(
         "{}",
         lang![
