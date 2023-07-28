@@ -1,4 +1,4 @@
-// use std::{error, fmt, num::ParseFloatError, str::FromStr};
+//! 2D f32 tuple point.
 
 use std::fmt::Display;
 

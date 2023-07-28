@@ -1,3 +1,7 @@
+//! Structure of the game.
+//!
+//! Contains all types needed for the implementation of game logic.
+
 use std::{cell::RefCell, rc::Rc};
 
 use self::{
@@ -12,10 +16,13 @@ pub mod region;
 pub mod team;
 pub mod unit;
 
+/// The State struct defines the current state of the game. Most importantly, it contains the
+/// (sparse) graph of the regions on the map.
 pub struct State {
     teams: Vec<Rc<Team>>,
     regions: Csr<Rc<Region>, Border, Undirected>,
     units: RefCell<Vec<Unit>>,
+    // orders?
 }
 
 impl State {

@@ -1,3 +1,5 @@
+//! Simple RGB color which can be read from hex strings
+
 use eyre::Report;
 use serde::{Deserialize, Serialize};
 use std::{error, fmt, str::FromStr};

@@ -1,10 +1,12 @@
+//! Legacy .hmap files
+
 use std::fs;
 use std::rc::Rc;
 
+use crate::game::region::{Region, RegionType};
+use crate::game::unit::Unit;
 use crate::lang;
-use crate::region::{Region, RegionType};
-use crate::unit::Unit;
-use crate::{draw::Color, lang::Language, lang::LANGUAGE, team::Team, State};
+use crate::{draw::Color, game::team::Team, game::State};
 
 use super::Database;
 

@@ -1,3 +1,5 @@
+//! Vec of Points, with many helper methods and trait implementations
+
 use serde::{Deserialize, Serialize};
 use std::{
     error,
@@ -20,10 +22,12 @@ impl Shape {
     }
 }
 
+/// Trait for types that may "physically" contain (other) types
 pub trait Contains<T> {
     fn contains(&self, internal: &T) -> bool;
 }
 
+/// Shapes may contain points
 impl Contains<&Point> for &Shape {
     fn contains(&self, internal: &&Point) -> bool {
         // logic
@@ -50,6 +54,7 @@ impl Contains<&Point> for &Shape {
     }
 }
 
+/// Shapes may contain other shapes
 impl Contains<&Shape> for &Shape {
     fn contains(&self, internal: &&Shape) -> bool {
         internal.points().iter().all(|p| self.contains(&p))
@@ -63,33 +68,6 @@ impl Display for Shape {
             write!(f, "M {},{} ", point.get().0, point.get().1)?;
         }
         write!(f, "Z\"")
-    }
-}
-
-pub struct ShapeIter<'a> {
-    shape: &'a Shape,
-    index: usize,
-}
-
-impl<'a> IntoIterator for &'a Shape {
-    type Item = &'a Point;
-    type IntoIter = ShapeIter<'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        ShapeIter {
-            shape: self,
-            index: 0,
-        }
-    }
-}
-
-impl<'a> Iterator for ShapeIter<'a> {
-    type Item = &'a Point;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let result = self.shape.0.get(self.index);
-        self.index += 1;
-        result
     }
 }
 

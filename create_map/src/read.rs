@@ -4,15 +4,12 @@ use std::fs;
 use std::io::Read;
 use std::{io, rc::Rc};
 
-use prelude::db::legacy::Legacy;
-use prelude::draw::Shape;
-use prelude::lang;
-use prelude::region::Base;
 use prelude::{
-    db::Database,
-    draw::{svg::*, Color},
+    db::{legacy::Legacy, Database},
+    draw::{svg::*, Color, Shape},
+    game::{region::Base, team::Team},
+    lang,
     lang::*,
-    team::Team,
 };
 
 use eyre::eyre;

@@ -8,7 +8,7 @@ use eyre::Result;
 
 use super::{Color, Shape};
 use crate::game::region::Base;
-use crate::team::Team;
+use crate::game::team::Team;
 
 mod error;
 

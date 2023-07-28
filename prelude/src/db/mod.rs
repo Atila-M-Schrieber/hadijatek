@@ -1,6 +1,8 @@
+//! Database trait for providing a "frontend" for working with databases.
+
 use eyre::Result;
 
-use crate::State;
+use crate::game::State;
 
 // pub mod read;
 pub mod legacy;

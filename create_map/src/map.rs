@@ -5,7 +5,7 @@ use itertools::Itertools;
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use prelude::{
     draw::{Color, Contains, Point, Shape},
-    region::{Border, Region, RegionType},
+    game::region::{Border, Region, RegionType},
 };
 
 use crate::read::PreRegion;

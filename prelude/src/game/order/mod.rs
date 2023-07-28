@@ -20,8 +20,6 @@ enum OrderStatus {
 #[derive(Debug)]
 struct Order {
     status: OrderStatus,
-    team: Team,
-    unit: Rc<Unit>,
     order: Box<dyn Orderable>,
 }
 

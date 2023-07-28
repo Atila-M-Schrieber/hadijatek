@@ -1,3 +1,7 @@
+//! Teams represent the players / groups of players of the game
+//!
+//! Teams have a name, and a color.
+
 use serde::{Deserialize, Serialize};
 
 use crate::draw::Color;

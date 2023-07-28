@@ -1,3 +1,27 @@
+//! Regions, their types, and the borders between them
+//!
+//! # Region types:
+//! * Land - occupiable only by land units - can't border sea regions
+//! * Sea - occupiable only by sea units - can't border land regions, can't have bases
+//! * Shore - occupiable by land and sea units - can border land and sea regions
+//!     * Strait - as above, but any (sea) units moving through the strait act as if they were
+//!     traversing through the strait as well (units defending on the stait may block passage)
+//!
+//! # Border types:
+//! * Land - travesible only by land units - connects a Land and a Land, Shore, or Strait region
+//! * Sea - traversible only by sea units - connects a Sea and a Sea, Shore, or Strait region
+//! * Shore - traversible by both land and sea units - connects Shore or Strait regions, but only
+//! if the two shores share a [tripoint](https://en.wikipedia.org/wiki/Tripoint) with the same Sea
+//! region.
+//! * Strait - traversible by sea units - connects two Sea regions through a strait (Contains an Rc
+//! of the Strait region for convenience.)
+//!
+//! # Bases
+//!
+//! Regions (except Sea) may contain bases, which are the sources of units for teams, the team
+//! which owns the most at the end of the game will be the victor. Bases may be unowned, or owned
+//! by a Team.
+
 use std::{cell::RefCell, rc::Rc};
 
 use super::team::Team;

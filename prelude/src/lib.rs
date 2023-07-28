@@ -28,16 +28,13 @@
 //! ## Lang
 //!
 //! This game, as far as I know, has only been played in Hungarian, but I want to be able to spread
-//! this game internationally, so multilingual support is essential. Currently only Hungarian
-//! (the default) and English are supported.
+//! it internationally, so multilingual support is essential. Currently only Hungarian (the
+//! default) and English are supported.
 
 pub mod db;
 pub mod draw;
-mod game;
+pub mod game;
 pub mod lang;
-// pub mod misc;
-
-pub use game::*;
 
 #[cfg(test)]
 mod tests {

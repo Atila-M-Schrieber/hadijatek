@@ -1,3 +1,5 @@
+//! Common patterns which enable shapes and drawing
+
 mod color;
 mod point;
 mod shape;

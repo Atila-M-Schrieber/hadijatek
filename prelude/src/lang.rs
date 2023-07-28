@@ -1,3 +1,7 @@
+//! The language framework enabling multilingual output
+//!
+//!
+
 use std::{error::Error, fmt::Display};
 
 use eyre::Result;
@@ -10,7 +14,7 @@ pub enum Language {
     Hungarian,
 }
 
-/// Determines the order of languages in the lang! macro
+/// Lists all languages (should be same order as the lang macro is used in)
 fn langs() -> Vec<Language> {
     vec![Hungarian, English]
 }
@@ -18,14 +22,14 @@ fn langs() -> Vec<Language> {
 /// Default language
 pub static mut LANGUAGE: Language = Hungarian;
 
-/// Multilingual String macro, input &str's in the order defined by langs(), and this will return
-/// the appropriate String depending on the state of the LANGUAGE global variable
+/// Multilingual String macro, input &str's in the given order (currently Hungarian then English),
+/// and this will return the appropriate String depending on the state of the LANGUAGE global variable
 #[macro_export]
 macro_rules! lang {
     ($hungarian:expr, $english:expr $(,)?) => {
-        match unsafe { LANGUAGE } {
-            Language::Hungarian => $hungarian.to_string(),
-            Language::English => $english.to_string(),
+        match unsafe { $crate::lang::LANGUAGE } {
+            $crate::lang::Language::Hungarian => $hungarian.to_string(),
+            $crate::lang::Language::English => $english.to_string(),
         }
     };
 }
