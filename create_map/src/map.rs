@@ -17,12 +17,6 @@ fn strait(shape: &Shape) -> (bool, &[Point]) {
     // By default reference to empty slice
     let mut strait_points = &points[0..0];
 
-    // needed because when checking for strait borders, are_neighboring_shapes checks for the
-    // number of straits, in the shapes, including the 2-length shape of the strait itself, which
-    // caused an underflow subtraction in the for loop.
-    if points.len() < 3 {
-        return (false, &[]);
-    }
     for i in 0..points.len() - 3 {
         let (p1, p2) = (points[i], points[i + 1]);
         for j in i..points.len() - 1 {
@@ -46,18 +40,14 @@ fn strait(shape: &Shape) -> (bool, &[Point]) {
 
 /// Returns true if all shapes in the slice have points in common
 fn are_neighboring_shapes(shapes: &[&Shape]) -> bool {
-    let mut common = Vec::new();
-    let len: usize = shapes.iter().map(|s| s.points().len()).sum();
-    // needed because straits are self-intersecting
-    let num_straits = shapes.iter().filter(|s| strait(s).0).count();
-    for shape in shapes {
-        for point in shape.points() {
-            if !common.contains(point) {
-                common.push(*point);
-            }
-        }
+    if let Some(head) = shapes.get(0) {
+        shapes
+            .iter()
+            .skip(1)
+            .all(|shape| head.points().iter().any(|p| shape.points().contains(p)))
+    } else {
+        false
     }
-    common.len() != len - 2 * num_straits
 }
 
 /// Simply constructs a graph of all PreRegions
@@ -143,12 +133,13 @@ fn to_full_regions(
             }
         }
         println!(
-            "{}: {}",
+            "{}-{}: {}",
             &new_graph[i].name(),
+            &new_graph[i].region_type(),
             &new_graph
                 .neighbors_slice(i)
                 .iter()
-                .map(|&j| new_graph[j].name().to_string())
+                .map(|&j| format!("{}-{}", new_graph[j].name(), new_graph.edge_weight(i, j)))
                 .join(", ")
         )
     }

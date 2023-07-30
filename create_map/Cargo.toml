@@ -10,5 +10,5 @@ prelude = { path = "../prelude" }
 svg = "0.13.1"
 eyre = "0.6.8"
 serde_json = "1.0.102"
-petgraph = "0.6.3"
+petgraph = { path = "../../petgraph" }
 itertools = "0.8.0"

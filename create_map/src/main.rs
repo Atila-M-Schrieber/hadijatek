@@ -13,6 +13,7 @@
 //! land part** - c (point colocated with b) - d (point colocated with a) - **rest of first land
 //! part**)
 //! * Regions which border each other must have points in the same places along their border
+//! * No borders with more than 3 Regions connected at one point.
 //! * Sea Regions cannot contain bases
 //! * The stroke of Regions with bases must be black, all other Regions must have non-black strokes
 //! * All sea Regions must be of the same color.

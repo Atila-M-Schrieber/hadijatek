@@ -22,7 +22,7 @@
 //! which owns the most at the end of the game will be the victor. Bases may be unowned, or owned
 //! by a Team.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use super::team::Team;
 use crate::draw::{Color, Shape};
@@ -125,5 +125,20 @@ impl Region {
 
     pub fn color(&self) -> Color {
         self.color
+    }
+}
+
+impl Display for RegionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl Display for Border {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Border::Strait(strait) => write!(f, "Strait ({})", strait.name),
+            _ => write!(f, "{:?}", self),
+        }
     }
 }
