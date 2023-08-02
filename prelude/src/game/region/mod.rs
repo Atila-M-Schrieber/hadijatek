@@ -22,7 +22,11 @@
 //! which owns the most at the end of the game will be the victor. Bases may be unowned, or owned
 //! by a Team.
 
-use std::{cell::RefCell, fmt::Display, rc::Rc};
+use std::{
+    cell::{Ref, RefCell},
+    fmt::Display,
+    rc::Rc,
+};
 
 use super::team::Team;
 use crate::draw::{Color, Shape};
@@ -107,6 +111,10 @@ impl Region {
 
     pub fn region_type(&self) -> RegionType {
         self.region_type
+    }
+
+    pub fn base(&self) -> Option<Ref<Base>> {
+        self.base.as_ref().map(|base| base.borrow())
     }
 
     pub fn has_base(&self) -> bool {

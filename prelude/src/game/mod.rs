@@ -2,7 +2,10 @@
 //!
 //! Contains all types needed for the implementation of game logic.
 
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Ref, RefCell},
+    rc::Rc,
+};
 
 use self::{
     region::{Border, Region},
@@ -39,8 +42,8 @@ impl State {
         &self.teams
     }
 
-    pub fn units(&self) -> &RefCell<Vec<Unit>> {
-        &self.units
+    pub fn units(&self) -> Ref<Vec<Unit>> {
+        self.units.borrow()
     }
 
     pub fn regions(&self) -> &Csr<Rc<Region>, Border, Undirected> {

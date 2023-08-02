@@ -8,7 +8,7 @@ use crate::game::unit::Unit;
 use crate::lang;
 use crate::{draw::Color, game::team::Team, game::State};
 
-use super::Database;
+use super::{Database, Prelude};
 
 use eyre::Result;
 use itertools::Itertools;
@@ -97,7 +97,6 @@ impl Database for Legacy {
             + "\n---\n"
             + &state
                 .units()
-                .borrow()
                 .iter()
                 .enumerate()
                 .map(unit_to_entry)
@@ -112,7 +111,7 @@ impl Database for Legacy {
         Ok(())
     }
 
-    fn to_state(&self) -> Result<State> {
+    fn to_state(&self) -> Result<(State, Prelude)> {
         todo!()
     }
 

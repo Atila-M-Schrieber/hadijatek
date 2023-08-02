@@ -43,11 +43,13 @@
 //!     * May bombard a region within support range - this is equivalent to placing a defending
 //!     unit on that region, which blocks all units attempting to traverse that region.
 
+use serde::{Deserialize, Serialize};
+
 use super::region::Region;
 use super::team::Team;
 use std::rc::Rc;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnitType {
     Tank,
     Ship,

@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Read;
 use std::{io, rc::Rc};
 
+use prelude::db::surrealdb::Surrealdb;
 use prelude::{
     db::{legacy::Legacy, Database},
     draw::{svg::*, Color, Shape},
@@ -263,7 +264,11 @@ pub fn get_regions(path: &str, teams: &[Rc<Team>]) -> Result<Vec<PreRegion>> {
     Ok(pre_regs)
 }
 
-pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Box<dyn Database>> {
+pub fn get_db(
+    path: &str,
+    water_stroke: Color,
+    land_stroke: Color,
+) -> Result<Box<dyn Database + '_>> {
     print_flush!("{}: ",
         lang![
         "Standard (SurrealDB) használatához nyomj entert, régi .hmap-ba kiíráshoz írdd be, hogy \"L\"",
@@ -273,8 +278,8 @@ pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Box
     let mut s = String::new();
     io::stdin().read_line(&mut s)?;
 
-    let _legacy = match s.chars().next() {
-        Some('\n') => Err(eyre!("db not implemented")),
+    let legacy = match s.chars().next() {
+        Some('\n') => Ok(false),
         Some('L') => Ok(true),
         _ => Err(eyre!("No such db")),
     }?;
@@ -298,13 +303,29 @@ pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Box
     s.clear();
     io::stdin().read_line(&mut s)?;
 
-    if s != "\n" {
+    // NEED TO RE-ENABLE THIS FUNCTIONALITY ASAP
+    /*     if s != "\n" {
         name = s.trim();
-    }
+    } */
 
-    Ok(Box::new(Legacy::new(
-        name.to_owned(),
-        water_stroke,
-        land_stroke,
-    )))
+    let username = "root";
+    let password = "root";
+    let ip = "127.0.0.1:8000";
+
+    if legacy {
+        Ok(Box::new(Legacy::new(
+            name.to_owned(),
+            water_stroke,
+            land_stroke,
+        )))
+    } else {
+        Ok(Box::new(Surrealdb::new(
+            name,
+            ip,
+            username,
+            password,
+            water_stroke,
+            land_stroke,
+        )))
+    }
 }

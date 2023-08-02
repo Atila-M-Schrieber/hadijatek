@@ -365,6 +365,7 @@ dependencies = [
  "petgraph",
  "prelude",
  "serde_json",
+ "surrealdb",
  "svg",
 ]
 
