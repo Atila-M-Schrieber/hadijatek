@@ -22,8 +22,8 @@ pub struct Surrealdb<'a> {
     turn: usize,
     water_stroke: Color,
     land_stroke: Color,
+    address: String, // IP adress / webside
     credentials: Namespace<'a>,
-    db: Surreal<Client>,
 }
 
 impl Surrealdb<'_> {
@@ -35,23 +35,17 @@ impl Surrealdb<'_> {
         water_stroke: Color,
         land_stroke: Color,
     ) -> Surrealdb<'a> {
-        let rt = Runtime::new().expect("Runtime creation failed");
-        let db = rt.block_on(async {
-            Surreal::new::<Ws>(ip_address)
-                .await
-                .expect("Could not connect to database")
-        });
         Surrealdb {
             name: name.to_owned(),
             turn: 0,
             water_stroke,
             land_stroke,
             credentials: Namespace {
-                namespace: name,
+                namespace: "hadijatek",
                 username,
                 password,
             },
-            db,
+            address: ip_address.to_owned(),
         }
     }
 }
@@ -119,21 +113,21 @@ impl Database for Surrealdb<'_> {
     }
 
     fn read_from_state(&mut self, state: crate::game::State) -> Result<()> {
-        let db = &self.db;
         let rt = Runtime::new()?;
         let future = async {
-            /*             db.signin(Namespace {
+            let db = Surreal::new::<Ws>(self.address.as_str()).await?;
+            db.signin(Namespace {
                 namespace: self.credentials.namespace.clone(),
                 username: self.credentials.username.clone(),
                 password: self.credentials.password.clone(),
             })
-            .await?; */
-            let db = Surreal::new::<Ws>("127.0.0.0:8000").await?;
-            db.signin(Root {
-                username: "root",
-                password: "root",
-            })
             .await?;
+            // let db = Surreal::new::<Ws>("127.0.0.0:8000").await?;
+            //db.signin(Root {
+            //    username: "root",
+            //    password: "root",
+            //})
+            //.await?;
 
             db.use_ns("hadijatek").use_db(&self.name).await?;
 
