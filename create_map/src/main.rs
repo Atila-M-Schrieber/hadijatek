@@ -68,7 +68,7 @@ fn main() -> Result<()> {
         .4;
 
     let map = mapify(pre_regions, water_color)?;
-    let state = State::new(teams, map);
+    let state = State::new(teams, map, water_stroke, land_stroke);
 
     let mut db = get_db(&path, water_stroke, land_stroke)?;
 

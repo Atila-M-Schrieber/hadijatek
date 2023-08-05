@@ -19,6 +19,6 @@ pub struct Prelude {
 pub trait Database {
     fn load(&self) -> Result<()>;
     fn write(&self) -> Result<()>;
-    fn to_state(&self) -> Result<(State, Prelude)>;
+    fn to_state(&self) -> Result<State>;
     fn read_from_state(&mut self, state: State) -> Result<()>;
 }
