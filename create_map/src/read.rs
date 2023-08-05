@@ -303,10 +303,9 @@ pub fn get_db(
     s.clear();
     io::stdin().read_line(&mut s)?;
 
-    // NEED TO RE-ENABLE THIS FUNCTIONALITY ASAP
-    /*     if s != "\n" {
+    if s != "\n" {
         name = s.trim();
-    } */
+    }
 
     let username = "hadijatek";
     let password = "hadijatek";
@@ -320,7 +319,7 @@ pub fn get_db(
         )))
     } else {
         Ok(Box::new(Surrealdb::new(
-            name,
+            name.to_owned(),
             ip,
             username,
             password,

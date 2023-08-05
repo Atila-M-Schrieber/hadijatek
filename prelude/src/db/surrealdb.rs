@@ -32,7 +32,7 @@ pub struct Surrealdb<'a> {
 
 impl Surrealdb<'_> {
     pub fn new<'a>(
-        name: &'a str,
+        name: String,
         ip_address: &'a str,
         username: &'a str,
         password: &'a str,
