@@ -7,7 +7,7 @@
 //! * No Bèzier curves - subject to change
 //! * All Regions are closed paths
 //! * No repeating points (except Straits)
-//! * Straits must have a pair of successive colocated points - e.g. have a thin line connecting
+//!     * Straits must have a pair of successive colocated points - e.g. have a thin line connecting
 //! the two land parts of the strait, which necessarily has 4 points: (**first land part** - a
 //! (first point on connecting line) - b (point on the other end of the connecting line) - **other
 //! land part** - c (point colocated with b) - d (point colocated with a) - **rest of first land
@@ -72,8 +72,7 @@ fn main() -> Result<()> {
 
     let mut db = get_db(&path, water_stroke, land_stroke)?;
 
-    db.read_from_state(state)?;
-    db.write()?;
+    db.write(state)?;
 
     Ok(())
 }

@@ -4,9 +4,8 @@ use std::fs;
 use std::io::Read;
 use std::{io, rc::Rc};
 
-use prelude::db::surrealdb::Surrealdb;
+use prelude::db::Surrealdb;
 use prelude::{
-    db::{legacy::Legacy, Database},
     draw::{svg::*, Color, Shape},
     game::{region::Base, team::Team},
     lang,
@@ -264,26 +263,7 @@ pub fn get_regions(path: &str, teams: &[Rc<Team>]) -> Result<Vec<PreRegion>> {
     Ok(pre_regs)
 }
 
-pub fn get_db(
-    path: &str,
-    water_stroke: Color,
-    land_stroke: Color,
-) -> Result<Box<dyn Database + '_>> {
-    print_flush!("{}: ",
-        lang![
-        "Standard (SurrealDB) használatához nyomj entert, régi .hmap-ba kiíráshoz írdd be, hogy \"L\"",
-        "To use the default (SurrealDB) database, press enter. To output to legacy .hmap file, press \"L\""
-        ]);
-
-    let mut s = String::new();
-    io::stdin().read_line(&mut s)?;
-
-    let legacy = match s.chars().next() {
-        Some('\n') => Ok(false),
-        Some('L') => Ok(true),
-        _ => Err(eyre!("No such db")),
-    }?;
-
+pub fn get_db(path: &str, water_stroke: Color, land_stroke: Color) -> Result<Surrealdb> {
     // path will be .svg, so this is ok
     let mut name = path[2..]
         .split_once('.')
@@ -300,7 +280,7 @@ pub fn get_db(
         ]
     );
 
-    s.clear();
+    let mut s = String::new();
     io::stdin().read_line(&mut s)?;
 
     if s != "\n" {
@@ -311,20 +291,12 @@ pub fn get_db(
     let password = "hadijatek";
     let ip = "127.0.0.0:8000";
 
-    if legacy {
-        Ok(Box::new(Legacy::new(
-            name.to_owned(),
-            water_stroke,
-            land_stroke,
-        )))
-    } else {
-        Ok(Box::new(Surrealdb::new(
-            name.to_owned(),
-            ip,
-            username,
-            password,
-            water_stroke,
-            land_stroke,
-        )))
-    }
+    Ok(Surrealdb::new(
+        name.to_owned(),
+        ip,
+        username,
+        password,
+        water_stroke,
+        land_stroke,
+    ))
 }

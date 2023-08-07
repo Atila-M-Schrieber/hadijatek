@@ -15,10 +15,14 @@ use surrealdb::Response;
 use surrealdb::Surreal;
 use tokio::runtime::Runtime;
 
-use crate::draw::{Color, Shape};
-use crate::game::region::{Base, Border, Region, RegionType};
-use crate::game::team::Team;
-use crate::game::State;
+use crate::{
+    draw::{Color, Shape},
+    game::{
+        region::{Base, Border, Region, RegionType},
+        team::Team,
+        State,
+    },
+};
 
 use super::{Database, Prelude};
 
