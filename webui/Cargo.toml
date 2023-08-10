@@ -7,6 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# prelude = {path = "../prelude"}
 axum = { version = "0.6.4", optional = true }
 console_error_panic_hook = "0.1"
 console_log = "1"
@@ -27,6 +28,7 @@ http = "0.2.8"
 
 [features]
 hydrate = ["leptos/hydrate", "leptos_meta/hydrate", "leptos_router/hydrate"]
+#, "prelude/hydrate"]
 ssr = [
     "dep:axum",
     "dep:tokio",
@@ -40,12 +42,13 @@ ssr = [
 ]
 
 # Defines a size-optimized profile for the WASM bundle in release mode
-[profile.wasm-release]
-inherits = "release"
-opt-level = 'z'
-lto = true
-codegen-units = 1
-panic = "abort"
+# Copied to main Cargo.toml
+#[profile.wasm-release]
+#inherits = "release"
+#opt-level = 'z'
+#lto = true
+#codegen-units = 1
+#panic = "abort"
 
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name

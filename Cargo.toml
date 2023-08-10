@@ -1,4 +1,5 @@
 [workspace]
+resolver = "1"
 
 members = [
 	"prelude",
@@ -7,4 +8,9 @@ members = [
 	"adjudicator",
 ]
 
-
+[profile.wasm-release]
+inherits = "release"
+opt-level = 'z'
+lto = true
+codegen-units = 1
+panic = "abort"

@@ -31,6 +31,7 @@
 //! it internationally, so multilingual support is essential. Currently only Hungarian (the
 //! default) and English are supported.
 
+#[cfg(feature = "ssr")]
 pub mod db;
 pub mod draw;
 pub mod game;
