@@ -2,11 +2,13 @@
 //!
 //! Teams have a name, and a color.
 
+#[cfg(feature = "ssr")]
 use serde::{Deserialize, Serialize};
 
 use crate::draw::Color;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ssr", derive(Serialize, Deserialize))]
 pub struct Team {
     name: String,
     color: Color,

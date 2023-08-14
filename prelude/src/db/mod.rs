@@ -71,9 +71,9 @@ impl Surrealdb<'_> {
             let db = Surreal::new::<Ws>(self.address.as_str()).await?;
             // Namespace apparently implements clone, but .clone() is not found...
             db.signin(Namespace {
-                namespace: self.credentials.namespace.clone(),
-                username: self.credentials.username.clone(),
-                password: self.credentials.password.clone(),
+                namespace: self.credentials.namespace,
+                username: self.credentials.username,
+                password: self.credentials.password,
             })
             .await?;
 
@@ -164,9 +164,9 @@ impl Surrealdb<'_> {
             let db = Surreal::new::<Ws>(self.address.as_str()).await?;
             // Namespace apparently implements clone, but .clone() is not found...
             db.signin(Namespace {
-                namespace: self.credentials.namespace.clone(),
-                username: self.credentials.username.clone(),
-                password: self.credentials.password.clone(),
+                namespace: self.credentials.namespace,
+                username: self.credentials.username,
+                password: self.credentials.password,
             })
             .await?;
             // let db = Surreal::new::<Ws>("127.0.0.0:8000").await?;

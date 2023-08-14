@@ -33,8 +33,10 @@
 
 #[cfg(feature = "ssr")]
 pub mod db;
+#[cfg(feature = "ssr")]
 pub mod draw;
 pub mod game;
+#[cfg(feature = "ssr")]
 pub mod lang;
 
 #[cfg(test)]
