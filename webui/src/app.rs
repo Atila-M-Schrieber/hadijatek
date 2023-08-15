@@ -4,9 +4,11 @@ use leptos_meta::*;
 use leptos_router::*;
 
 mod auth;
+mod game;
 mod lang;
 
 use auth::*;
+use game::*;
 use lang::*;
 
 #[component]
@@ -46,10 +48,10 @@ pub fn App(cx: Scope) -> impl IntoView {
             <a href="/" class="logo">Hadijáték</a>
             <ul class="nav-list">
                 <li>
-                    <a href="#"><Lang hu="Játékok" en="Games"/></a>
+                    <a href="/game"><Lang hu="Játékok" en="Games"/></a>
                     <div class="dropdown-content">
-                        <a href="/game1">Game 1</a>
-                        <a href="/game2">Game 2</a>
+                        <a href="/game/test">test</a>
+                        <a href="/game/game2">Game 2</a>
                     </div>
                 </li>
             </ul>
@@ -100,6 +102,10 @@ pub fn App(cx: Scope) -> impl IntoView {
                 <Routes>
                     <Route path="/" view=HomePage/>
                     <Route path="/login" view=move |cx| view!{cx, <LoginPage login=login/>}/>
+                    <Route path="/game" view=GamesPage>
+                        <Route path=":game" view=GamePage/>
+                        <Route path="" view=NoGamePage/>
+                    </Route>
                 </Routes>
             </main>
         </Router>
