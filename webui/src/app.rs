@@ -3,11 +3,10 @@ use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
 
-mod auth;
 mod game;
-mod lang;
+pub mod lang;
 
-use auth::*;
+use crate::auth::*;
 use game::*;
 use lang::*;
 
@@ -29,14 +28,18 @@ pub fn App(cx: Scope) -> impl IntoView {
 
     let login = create_server_action::<Login>(cx);
     let logout = create_server_action::<Logout>(cx);
+    let signup = create_server_action::<Signup>(cx);
 
-    let user = create_resource(
+    let user = create_local_resource(
         cx,
-        move || (login.value().get(), logout.version().get()),
-        move |(maybeuser, _)| {
-            dbg!(&maybeuser);
-            session_login(cx, maybeuser)
+        move || {
+            (
+                login.version().get(),
+                logout.version().get(),
+                signup.version().get(),
+            )
         },
+        move |_| get_user(cx),
     );
 
     provide_context(cx, user);
@@ -85,8 +88,6 @@ pub fn App(cx: Scope) -> impl IntoView {
         // sets the document title
         <Title text="Hadijáték"/>
 
-
-        // content for this welcome page
         <Router fallback=|cx| {
             let mut outside_errors = Errors::default();
             outside_errors.insert_with_default_key(AppError::NotFound);
