@@ -49,7 +49,7 @@ cfg_if! { if #[cfg(feature = "ssr")] {
 }}
 
 #[server(Login, "/api")]
-pub async fn login(cx: Scope, username: String, password: String) -> Result<User, ServerFnError> {
+pub async fn login(username: String, password: String) -> Result<User, ServerFnError> {
     use axum::http::header;
     use axum_extra::extract::cookie::Cookie;
     use leptos_axum::{redirect, ResponseOptions};
@@ -59,7 +59,7 @@ pub async fn login(cx: Scope, username: String, password: String) -> Result<User
     let mut user = User::default();
 
     if !username.is_empty() && &username != "Guest" {
-        let response = expect_context::<ResponseOptions>(cx);
+        let response = expect_context::<ResponseOptions>();
 
         println!("user found...");
         let mut cookie = Cookie::new("session", "lmao");
@@ -68,7 +68,7 @@ pub async fn login(cx: Scope, username: String, password: String) -> Result<User
             response.insert_header(header::SET_COOKIE, cookie);
         }
 
-        redirect(cx, "/");
+        redirect("/");
 
         user = User {
             username,
@@ -81,14 +81,14 @@ pub async fn login(cx: Scope, username: String, password: String) -> Result<User
 }
 
 #[server(Logout, "/api")]
-pub async fn logout(cx: Scope) -> Result<(), ServerFnError> {
+pub async fn logout() -> Result<(), ServerFnError> {
     use axum::http::header;
     use axum_extra::extract::cookie::Cookie;
     use cookie::time::Duration;
     use leptos_axum::extract;
     use leptos_axum::ResponseOptions;
 
-    let response = expect_context::<ResponseOptions>(cx);
+    let response = expect_context::<ResponseOptions>();
 
     let mut cookie = Cookie::new("session", "");
     cookie.set_max_age(Duration::ZERO);
@@ -100,7 +100,7 @@ pub async fn logout(cx: Scope) -> Result<(), ServerFnError> {
 
 #[server(SessionLogin, "/api")]
 pub async fn session_login(
-    cx: Scope,
+    
     user: Option<Result<User, ServerFnError>>,
 ) -> Result<User, ServerFnError> {
     use axum_extra::extract::cookie::CookieJar;
@@ -112,7 +112,7 @@ pub async fn session_login(
         println!("user found");
         Ok(Some(user.password))
     } else {
-        extract(cx, |cookie_jar: CookieJar| async move {
+        extract(|cookie_jar: CookieJar| async move {
             cookie_jar.get("session").map(|s| s.value().to_owned())
         })
         .await

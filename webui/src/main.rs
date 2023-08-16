@@ -29,19 +29,19 @@ if #[cfg(feature = "ssr")] {
 
         log!("{:?}", path);
 
-        handle_server_fns_with_context(path, headers, raw_query, move |cx| {
-            provide_context(cx, auth_session.clone());
-            provide_context(cx, app_state.db.clone());
+        handle_server_fns_with_context(path, headers, raw_query, move || {
+            provide_context(auth_session.clone());
+            provide_context(app_state.db.clone());
         }, request).await
     }
 
     async fn leptos_routes_handler(auth_session: AuthSession, State(app_state): State<AppState>, req: Request<AxumBody>) -> Response{
             let handler = leptos_axum::render_app_to_stream_with_context(app_state.leptos_options.clone(),
-            move |cx| {
-                provide_context(cx, auth_session.clone());
-                provide_context(cx, app_state.db.clone());
+            move || {
+                provide_context(auth_session.clone());
+                provide_context(app_state.db.clone());
             },
-            |cx| view! { cx, <App/> }
+            || view! { <App/> }
         );
         handler(req).await.into_response()
     }
@@ -71,7 +71,7 @@ if #[cfg(feature = "ssr")] {
         let conf = get_configuration(None).await.unwrap();
         let leptos_options = conf.leptos_options;
         let addr = leptos_options.site_addr;
-        let routes = generate_route_list(|cx| view! { cx, <App/> }).await;
+        let routes = generate_route_list(|| view! { <App/> }).await;
 
         let app_state = AppState{
             leptos_options,

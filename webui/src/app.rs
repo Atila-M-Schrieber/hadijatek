@@ -11,27 +11,26 @@ use game::*;
 use lang::*;
 
 #[component]
-pub fn App(cx: Scope) -> impl IntoView {
+pub fn App() -> impl IntoView {
     // Provides context that manages stylesheets, titles, meta tags, etc.
-    provide_meta_context(cx);
+    provide_meta_context();
 
-    let (lang, set_lang) = create_signal(cx, Language::Hungarian);
-    provide_context(cx, lang);
-    provide_context(cx, set_lang);
+    let (lang, set_lang) = create_signal(Language::Hungarian);
+    provide_context(lang);
+    provide_context(set_lang);
 
     // Check if there is an existing session, if not, login as guest
-    /*     let user = create_resource(cx, move || cx, session_login);
+    /*     let user = create_resource(move || session_login);
     let (user, set_user) =
-        create_signal(cx, user.with(cx, |user| user.clone().unwrap_or_default())); */
-    // let (user, set_user) = create_signal(cx, User::default());
-    // provide_context(cx, user);
+        create_signal(user.with(|user| user.clone().unwrap_or_default())); */
+    // let (user, set_user) = create_signal(User::default());
+    // provide_context(user);
 
-    let login = create_server_action::<Login>(cx);
-    let logout = create_server_action::<Logout>(cx);
-    let signup = create_server_action::<Signup>(cx);
+    let login = create_server_action::<Login>();
+    let logout = create_server_action::<Logout>();
+    let signup = create_server_action::<Signup>();
 
-    let user = create_local_resource(
-        cx,
+    let user = create_resource(
         move || {
             (
                 login.version().get(),
@@ -39,13 +38,13 @@ pub fn App(cx: Scope) -> impl IntoView {
                 signup.version().get(),
             )
         },
-        move |_| get_user(cx),
+        move |_| get_user(),
     );
 
-    provide_context(cx, user);
+    provide_context(user);
 
     // The navigation bar - Home, Games (dropdown), right - Login/User
-    let nav_bar = view! {cx,
+    let nav_bar = view! {
         <div class="container">
             <div class="left-section">
             <a href="/" class="logo">Hadijáték</a>
@@ -79,7 +78,7 @@ pub fn App(cx: Scope) -> impl IntoView {
     };
 
     view! {
-        cx,
+
 
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
@@ -88,13 +87,13 @@ pub fn App(cx: Scope) -> impl IntoView {
         // sets the document title
         <Title text="Hadijáték"/>
 
-        <Router fallback=|cx| {
+        <Router fallback=|| {
             let mut outside_errors = Errors::default();
             outside_errors.insert_with_default_key(AppError::NotFound);
-            view! { cx,
+            view! {
                 <ErrorTemplate outside_errors/>
             }
-            .into_view(cx)
+            .into_view()
         }>
             <nav class="navbar">
                 {nav_bar}
@@ -102,7 +101,7 @@ pub fn App(cx: Scope) -> impl IntoView {
             <main>
                 <Routes>
                     <Route path="/" view=HomePage/>
-                    <Route path="/login" view=move |cx| view!{cx, <LoginPage login=login/>}/>
+                    <Route path="/login" view=move || view!{<LoginPage login=login/>}/>
                     <Route path="/game" view=GamesPage>
                         <Route path=":game" view=GamePage/>
                         <Route path="" view=NoGamePage/>
@@ -115,13 +114,13 @@ pub fn App(cx: Scope) -> impl IntoView {
 
 /// Renders the home page of your application.
 #[component]
-fn HomePage(cx: Scope) -> impl IntoView {
+fn HomePage() -> impl IntoView {
     // Creates a reactive value to update the button
-    let (count, set_count) = create_signal(cx, 0);
+    let (count, set_count) = create_signal(0);
     let on_click = move |_| set_count.update(|count| *count += 1);
 
-    view! { cx,
+    view! {
         <h1>"Welcome to Hadijáték!"</h1>
-        <button on:click=on_click><Lang hu="Nyomjá'meg he" en="Click Me"/>": " {count}</button>
+        <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
     }
 }

@@ -88,33 +88,32 @@ cfg_if! { if #[cfg(feature = "ssr")] {
         }
     }
 
-    pub fn auth(cx: Scope) -> Result<AuthSession, ServerFnError> {
-        use_context::<AuthSession>(cx)
+    pub fn auth() -> Result<AuthSession, ServerFnError> {
+        use_context::<AuthSession>()
             .ok_or_else(|| ServerFnError::ServerError("Auth session missing.".into()))
     }
 
-    pub fn db(cx: Scope) -> Result<Surreal<Client>, ServerFnError> {
-        use_context::<Surreal<Client>>(cx)
+    pub fn db() -> Result<Surreal<Client>, ServerFnError> {
+        use_context::<Surreal<Client>>()
             .ok_or_else(|| ServerFnError::ServerError("Pool missing.".into()))
     }
 }}
 
 #[server(GetUser, "/api")]
-pub async fn get_user(cx: Scope) -> Result<Option<User>, ServerFnError> {
-    let auth = auth(cx)?;
+pub async fn get_user() -> Result<Option<User>, ServerFnError> {
+    let auth = auth()?;
 
     Ok(auth.current_user)
 }
 
 #[server(Login, "/api")]
 pub async fn login(
-    cx: Scope,
     username: String,
     password: String,
     remember: Option<String>,
 ) -> Result<(), ServerFnError> {
-    let db = db(cx)?;
-    let auth = auth(cx)?;
+    let db = db()?;
+    let auth = auth()?;
 
     let user: User = User::get_from_username(username, &db)
         .await
@@ -124,7 +123,7 @@ pub async fn login(
         true => {
             auth.login_user(user.id);
             auth.remember_user(remember.is_some());
-            leptos_axum::redirect(cx, "/");
+            leptos_axum::redirect("/");
             Ok(())
         }
         false => Err(ServerFnError::ServerError(
@@ -135,14 +134,13 @@ pub async fn login(
 
 #[server(Signup, "/api")]
 pub async fn signup(
-    cx: Scope,
     username: String,
     password: String,
     password_confirmation: String,
     remember: Option<String>,
 ) -> Result<(), ServerFnError> {
-    let db = db(cx)?;
-    let auth = auth(cx)?;
+    let db = db()?;
+    let auth = auth()?;
 
     if password != password_confirmation {
         return Err(ServerFnError::ServerError(
@@ -171,17 +169,17 @@ pub async fn signup(
     auth.login_user(user.id);
     auth.remember_user(remember.is_some());
 
-    leptos_axum::redirect(cx, "/");
+    leptos_axum::redirect("/");
 
     Ok(())
 }
 
 #[server(Logout, "/api")]
-pub async fn logout(cx: Scope) -> Result<(), ServerFnError> {
-    let auth = auth(cx)?;
+pub async fn logout() -> Result<(), ServerFnError> {
+    let auth = auth()?;
 
     auth.logout_user();
-    leptos_axum::redirect(cx, "/");
+    leptos_axum::redirect("/");
 
     Ok(())
 }
@@ -206,13 +204,13 @@ impl Display for UserError {
 
 impl Error for UserError {}
 
-pub fn with_user<F, T>(cx: Scope, closure: F) -> Result<T, UserError>
+pub fn with_user<F, T>(closure: F) -> Result<T, UserError>
 where
     F: Fn(&User) -> T,
 {
-    let user = expect_context::<UserResource>(cx);
+    let user = expect_context::<UserResource>();
     use UserError::*;
-    user.with(cx, |user| match user {
+    user.with(|user| match user {
         Ok(Some(user)) => Ok(closure(user)),
         Ok(None) => Err(GuestUser),
         Err(err) => Err(Server(err.clone())),
@@ -224,25 +222,24 @@ where
 /// The login button
 #[component]
 pub fn UserButton(
-    cx: Scope,
     user: UserResource,
     logout: Action<Logout, Result<(), ServerFnError>>,
 ) -> impl IntoView {
-    view! {cx,
+    view! {
         <Transition fallback=move||
-            view!{cx,
+            view!{
                 <Lang hu="Bejelentkezés..." en="Loging in..."/>
             }
         >
         <ErrorBoundary
-            fallback=move |_,_| view!{cx,
+            fallback=move |_| view!{
                 <a href="/login"><Lang hu="Bejelentkezés" en="Log in"/></a>}
         >
         {
-            move || { with_user(cx, |user| {
+            move || { with_user(|user| {
                 let username = user.username.clone();
                 dbg!(&username);
-                view!{cx,
+                view!{
                     <a href="/settings">Settings ({username})</a>
                     <div class="dropdown-content">
                         <ActionForm action=logout>
@@ -251,7 +248,7 @@ pub fn UserButton(
                             </button>
                         </ActionForm>
                     </div>
-                }.into_view(cx)
+                }.into_view()
             })}
         }
         </ErrorBoundary>
@@ -261,14 +258,12 @@ pub fn UserButton(
 
 /// The login page
 #[component]
-pub fn LoginPage(cx: Scope, login: Action<Login, Result<(), ServerFnError>>) -> impl IntoView {
+pub fn LoginPage(login: Action<Login, Result<(), ServerFnError>>) -> impl IntoView {
     // Creates a reactive value to update the button
-    let (count, set_count) = create_signal(cx, 0);
+    let (count, set_count) = create_signal(0);
     let on_click = move |_| set_count.update(|count| *count += 1);
 
-    let user = expect_context::<UserResource>(cx);
-
-    view! { cx,
+    view! {
         <div class="login-container">
             <h2><Lang hu="Bejelentkezés" en="Login"/></h2>
             <ActionForm action=login>
@@ -285,10 +280,23 @@ pub fn LoginPage(cx: Scope, login: Action<Login, Result<(), ServerFnError>>) -> 
                 </div>
             </ActionForm>
             <p class="signup-text"><a href="/signup">
-                <Lang hu="Feljelentkezés" en="Sign up"/>
+                <Lang hu="Regisztráció" en="Sign up"/>
             </a></p>
         </div>
-        <button on:click=on_click><Lang hu="Nyomjá'meg he" en="Click Me"/>": " {count}</button>
-        <p>{move || with_user(cx, |user| user.username.clone())}</p>
+        <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
+        <Transition fallback=||()>
+        <ErrorBoundary
+            fallback=move |err|
+                view!{
+                        {move || err.get()
+                            .into_iter()
+                            .map(|(_, e)| view! {<p>{e.to_string()}</p>})
+                            .collect_view()
+                        }
+                }
+        >
+        <p>{move || with_user(|user| user.username.clone())}</p>
+        </ErrorBoundary>
+        </Transition>
     }
 }

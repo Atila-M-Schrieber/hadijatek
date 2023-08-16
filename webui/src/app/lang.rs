@@ -7,12 +7,12 @@ pub enum Language {
 }
 
 #[component]
-pub fn Lang<S>(cx: Scope, hu: S, en: S) -> impl IntoView
+pub fn Lang<S>(hu: S, en: S) -> impl IntoView
 where
     S: ToString + 'static,
 {
     use Language::*;
-    let lang = expect_context::<ReadSignal<Language>>(cx);
+    let lang = expect_context::<ReadSignal<Language>>();
 
     // must be a closure
     move || match lang() {

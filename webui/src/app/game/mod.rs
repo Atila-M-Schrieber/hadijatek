@@ -6,12 +6,12 @@ use web_sys::SvgElement;
 use super::lang::*;
 
 #[component]
-pub fn GamesPage(cx: Scope) -> impl IntoView {
+pub fn GamesPage() -> impl IntoView {
     // Creates a reactive value to update the button
-    let (count, set_count) = create_signal(cx, 0);
+    let (count, set_count) = create_signal(0);
     let on_click = move |_| set_count.update(|count| *count += 1);
 
-    view! { cx,
+    view! {
         <h1>"Welcome to the Games Page!"</h1>
         <button on:click=on_click><Lang hu="Nyomjá'meg he" en="Click Me"/>": " {count}</button>
         <Outlet/>
@@ -19,28 +19,28 @@ pub fn GamesPage(cx: Scope) -> impl IntoView {
 }
 
 #[component]
-pub fn NoGamePage(cx: Scope) -> impl IntoView {
+pub fn NoGamePage() -> impl IntoView {
     // Creates a reactive value to update the button
-    let (count, set_count) = create_signal(cx, 0);
+    let (count, set_count) = create_signal(0);
     let on_click = move |_| set_count.update(|count| *count += 1);
 
-    view! { cx,
+    view! {
         <h1>"No game :<"</h1>
         <button on:click=on_click><Lang hu="Nyomjá'meg he" en="Click Me"/>": " {count}</button>
     }
 }
 
 #[component]
-pub fn GamePage(cx: Scope) -> impl IntoView {
-    let params = use_params_map(cx);
+pub fn GamePage() -> impl IntoView {
+    let params = use_params_map();
     let game = move || params.with(|p| p.get("game").cloned());
 
-    let (mouse_pos, set_mouse_pos) = create_signal(cx, (0, 0));
+    let (mouse_pos, set_mouse_pos) = create_signal((0, 0));
 
-    let (from, set_from) = create_signal(cx, (0, 0));
-    let (to, set_to) = create_signal(cx, (0, 0));
+    let (from, set_from) = create_signal((0, 0));
+    let (to, set_to) = create_signal((0, 0));
 
-    let (bound, set_bound) = create_signal(cx, (true, true));
+    let (bound, set_bound) = create_signal((true, true));
 
     let on_move = move |mouse: MouseEvent| {
         if let Some(Ok(Some(svg_element))) = mouse
@@ -100,7 +100,7 @@ pub fn GamePage(cx: Scope) -> impl IntoView {
     let to_x = move || to().0;
     let to_y = move || to().1;
 
-    view! { cx,
+    view! {
         <h1>"Welcome to "{game}" Game Page!"</h1>
         <p>{move || format!("{:?}, {:?}, {:?}", mouse_pos(), from(), to())}</p>
         <div> // on:click=on_click on:mousemove=on_move>
@@ -118,7 +118,7 @@ pub fn GamePage(cx: Scope) -> impl IntoView {
                     </marker>
                 </defs>
             <rect width="100%" height="100%" fill="grey"/>
-            <Show when=move||!bound.get().0 || !bound.get().1 fallback=|_|()>
+            <Show when=move||!bound.get().0 || !bound.get().1 fallback=||()>
             <line x1=from_x y1=from_y x2=to_x y2=to_y stroke="black" marker-end="url(#arrow)"/>
             </Show>
         </svg>
