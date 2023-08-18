@@ -1,7 +1,7 @@
 use cfg_if::cfg_if;
 pub mod app;
 pub mod auth;
-pub mod error_template;
+pub mod error;
 pub mod fileserv;
 
 cfg_if! { if #[cfg(feature = "ssr")] {

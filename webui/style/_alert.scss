@@ -1,0 +1,56 @@
+.alert {
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+    font-family: Arial, sans-serif;
+	text-align: left;
+    
+    h4 {
+        margin-top: 0;
+        margin-bottom: 10px; // Giving a little more spacing before content
+        font-weight: bold;
+		text-align: center;
+    }
+
+    .alert-content {
+        p, ul, ol, a {
+            margin-bottom: 5px;
+        }
+
+        ul, ol {
+            padding-left: 20px; // A little indentation for lists
+        }
+
+        a {
+            text-decoration: underline; // Styling links
+            cursor: pointer;
+            &:hover {
+                text-decoration: none;
+            }
+        }
+    }
+
+    &.error {
+        background-color: #f8d7da;
+        border: 2px solid #f67176;
+        color: #861525;
+
+        .alert-content {
+            a {
+                color: #842029; // Keeping the error color consistent for links
+            }
+        }
+    }
+
+    &.warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+
+        .alert-content {
+            a {
+                color: #856404; // Keeping the warning color consistent for links
+            }
+        }
+    }
+}

@@ -1,4 +1,4 @@
-use crate::error_template::{AppError, ErrorTemplate};
+use crate::error::{AppError, ErrorTemplate};
 use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
@@ -71,7 +71,7 @@ pub fn App() -> impl IntoView {
                         </a>
                     </div>
                 </li>
-                <li><UserButton user=user logout=logout/></li>
+                <li><UserButton logout=logout/></li>
             </ul>
             </div>
         </div>
@@ -102,6 +102,7 @@ pub fn App() -> impl IntoView {
                 <Routes>
                     <Route path="/" view=HomePage/>
                     <Route path="/login" view=move || view!{<LoginPage login=login/>}/>
+                    <Route path="/signup" view=move || view!{<SignupPage signup=signup/>}/>
                     <Route path="/game" view=GamesPage>
                         <Route path=":game" view=GamePage/>
                         <Route path="" view=NoGamePage/>

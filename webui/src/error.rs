@@ -24,7 +24,6 @@ impl AppError {
 // Feel free to do more complicated things here than just displaying the error.
 #[component]
 pub fn ErrorTemplate(
-    
     #[prop(optional)] outside_errors: Option<Errors>,
     #[prop(optional)] errors: Option<RwSignal<Errors>>,
 ) -> impl IntoView {
@@ -66,11 +65,32 @@ pub fn ErrorTemplate(
                 let error_string = error.1.to_string();
                 let error_code= error.1.status_code();
                 view! {
-                    
+
                     <h2>{error_code.to_string()}</h2>
                     <p>"Error: " {error_string}</p>
                 }
             }
         />
+    }
+}
+
+/// Alert for errors and warnings, provide either content or children
+#[component]
+pub fn Alert(
+    header: String,
+    #[prop(default = false)] warning: bool,
+    #[prop(optional)] content: Option<String>,
+    #[prop(optional)] children: Option<ChildrenFn>,
+) -> impl IntoView {
+    let class: String = "alert ".to_string() + if !warning { "error" } else { "warning" };
+    view! {
+        <div class={class}>
+        {if !header.is_empty() {
+            view!{<h4>{header}</h4>}.into_view()
+        } else {().into_view()}}
+        <div class="alert-content">
+        {children}{content}
+        </div>
+        </div>
     }
 }

@@ -91,10 +91,6 @@ pub fn GamePage() -> impl IntoView {
         }
     };
 
-    // let from_x = move || from.with(|n| n.map(|n| n.0));
-    // let from_y = move || from.with(|n| n.map(|n| n.1));
-    // let to_x = move || from.with(|n| n.map(|_| to().0));
-    // let to_y = move || from.with(|n| n.map(|_| to().1));
     let from_x = move || from().0;
     let from_y = move || from().1;
     let to_x = move || to().0;
