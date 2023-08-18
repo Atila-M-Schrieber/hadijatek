@@ -4,10 +4,12 @@ use leptos_meta::*;
 use leptos_router::*;
 
 mod game;
+mod pages;
 
 use crate::auth::*;
 use crate::lang::*;
 use game::*;
+use pages::*;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -17,13 +19,6 @@ pub fn App() -> impl IntoView {
     let (lang, set_lang) = create_signal(Language::Hungarian);
     provide_context(lang);
     provide_context(set_lang);
-
-    // Check if there is an existing session, if not, login as guest
-    /*     let user = create_resource(move || session_login);
-    let (user, set_user) =
-        create_signal(user.with(|user| user.clone().unwrap_or_default())); */
-    // let (user, set_user) = create_signal(User::default());
-    // provide_context(user);
 
     let login = create_server_action::<Login>();
     let logout = create_server_action::<Logout>();
@@ -41,6 +36,12 @@ pub fn App() -> impl IntoView {
     );
 
     provide_context(user);
+
+    let logged_in = move || with_user(|_| ()).is_ok();
+    // let user_role = move || with_user(|user| user.role).ok();
+    // let is_admin = move || user_role() == Some(UserRole::Admin);
+    // let is_regular = move || user_role() == Some(UserRole::Regular);
+    let is_guest = move || !logged_in();
 
     // The navigation bar - Home, Games (dropdown), right - Login/User
     let nav_bar = view! {
@@ -100,27 +101,19 @@ pub fn App() -> impl IntoView {
             <main>
                 <Routes>
                     <Route path="/" view=HomePage/>
-                    <Route path="/login" view=move || view!{<LoginPage login=login/>}/>
-                    <Route path="/signup" view=move || view!{<SignupPage signup=signup/>}/>
+                    <ProtectedRoute path="/login" redirect_path="/" condition=is_guest
+                        view=move || view!{<LoginPage login=login/>}/>
+                    <ProtectedRoute path="/signup" redirect_path="/" condition=is_guest
+                        view=move || view!{<SignupPage signup=signup/>}/>
+                    <ProtectedRoute path="/settings" redirect_path="/" condition=logged_in
+                        view=SettingsPage />
                     <Route path="/game" view=GamesPage>
-                        <Route path=":game" view=GamePage/>
+                        // <Route path="no-guests" view=NoGuestsPage/>
+                        <Route path=":game" view=GamePage/> // redirect to no-guests if needed
                         <Route path="" view=NoGamePage/>
                     </Route>
                 </Routes>
             </main>
         </Router>
-    }
-}
-
-/// Renders the home page of your application.
-#[component]
-fn HomePage() -> impl IntoView {
-    // Creates a reactive value to update the button
-    let (count, set_count) = create_signal(0);
-    let on_click = move |_| set_count.update(|count| *count += 1);
-
-    view! {
-        <h1>"Welcome to Hadijáték!"</h1>
-        <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
     }
 }

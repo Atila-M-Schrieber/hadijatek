@@ -186,10 +186,11 @@ pub fn UserErrorBoundary<A: 'static>(
                 "This username is taken!",
             ),
             // Includes OtherServerError
-            _ => (
-                "Ismeretlen hiba, szólj az adminisztrátornak!",
-                "Unknown error, contact the administrator!",
-            ),
+            // _ => (
+            //     "Ismeretlen hiba, szólj az adminisztrátornak!",
+            //     "Unknown error, contact the administrator!",
+            // ),
+            _ => ("", ""),
         }
     };
 
@@ -201,9 +202,11 @@ pub fn UserErrorBoundary<A: 'static>(
             .map(|(_, err)| err_text(err.clone()))
             .unwrap_or(("", ""));
         view! {
+            <Show when=||!err_text.0.is_empty() fallback=||()>
             <Alert header="">
                 <Lang hu=err_text.0 en=err_text.1 />
             </Alert>
+            </Show>
         }
     };
 

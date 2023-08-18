@@ -13,7 +13,7 @@ pub fn GamesPage() -> impl IntoView {
 
     view! {
         <h1>"Welcome to the Games Page!"</h1>
-        <button on:click=on_click><Lang hu="Nyomjá'meg he" en="Click Me"/>": " {count}</button>
+        <button on:click=on_click><Lang hu="Nyomj meg" en="Click Me"/>": " {count}</button>
         <Outlet/>
     }
 }
