@@ -3,7 +3,7 @@ use leptos_router::*;
 use wasm_bindgen::JsCast;
 use web_sys::SvgElement;
 
-use super::lang::*;
+use crate::lang::*;
 
 #[component]
 pub fn GamesPage() -> impl IntoView {

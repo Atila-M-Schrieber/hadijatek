@@ -1,7 +1,8 @@
 use std::{error::Error, fmt::Display};
 
-use crate::app::lang::*;
+use crate::components::*;
 use crate::error::*;
+use crate::lang::*;
 use cfg_if::cfg_if;
 use leptos::ev::Event;
 use leptos::*;
@@ -90,12 +91,25 @@ cfg_if! { if #[cfg(feature = "ssr")] {
                 .query("SELECT id FROM user WHERE username = $username")
                 .bind(("username", &name))
                 .await.ok()?;
-            // log!("reached query: {id:?}");
+            // log!("reached query: {id:#?}");
             let id: Option<Thing> = id.take("id").ok()?;
             // log!("reached opt<string>: {id:?}");
             let id: String = Value::from(id?).to_string()[5..].to_string();
             // log!("reached string: {id:?}");
             Self::get(id, db).await
+        }
+
+        pub async fn name_taken(name: &str, db: &Surreal<Client>) -> Result<bool, surrealdb::Error> {
+            db.use_ns("hadijatek").use_db("auth").await?;
+
+            let mut id = db
+                .query("SELECT id FROM user WHERE username = $username")
+                .bind(("username", &name))
+                .await?;
+
+            let id: Option<Thing> = id.take("id")?;
+
+            Ok(id.is_some())
         }
     }
 
@@ -132,7 +146,7 @@ cfg_if! { if #[cfg(feature = "ssr")] {
 
     pub fn db() -> Result<Surreal<Client>, ServerFnError> {
         use_context::<Surreal<Client>>()
-            .ok_or_else(|| ServerFnError::ServerError("Pool missing.".into()))
+            .ok_or_else(|| ServerFnError::ServerError("DB missing.".into()))
     }
 }}
 
@@ -154,7 +168,7 @@ pub async fn login(
 
     let user: User = User::get_from_username(username, &db)
         .await
-        .ok_or_else(|| ServerFnError::ServerError("User does not exist.".into()))?;
+        .ok_or_else(|| ServerFnError::ServerError("NO_USER: User does not exist.".into()))?;
 
     match verify(password, &user.password)? {
         true => {
@@ -164,7 +178,7 @@ pub async fn login(
             Ok(())
         }
         false => Err(ServerFnError::ServerError(
-            "Password does not match.".to_string(),
+            "BAD_PASSWORD: Password does not match.".to_string(),
         )),
     }
 }
@@ -179,9 +193,31 @@ pub async fn signup(
     let db = db()?;
     let auth = auth()?;
 
+    const MIN_PW_LEN: usize = 6;
+
+    if password.len() < MIN_PW_LEN {
+        return Err(ServerFnError::ServerError(
+            "SHORT_PASSWORD: Password is too short.".to_string(),
+        ));
+    }
+    if password.chars().any(|c| c.is_whitespace() || !c.is_ascii()) {
+        return Err(ServerFnError::ServerError(
+            "INVALID_PASSWORD: Password contains whitespace, or non-ASCII chars.".to_string(),
+        ));
+    }
+
+    let user_exists = User::name_taken(&username, &db).await?;
+    if user_exists {
+        return Err(ServerFnError::ServerError(
+            "TAKEN_NAME: User already exists!".to_string(),
+        ));
+    } else {
+        log!("User {} does not yet exist, signing up...", &username);
+    }
+
     if password != password_confirmation {
         return Err(ServerFnError::ServerError(
-            "Passwords did not match.".to_string(),
+            "UNCONFIRMED_PASSWORD: Passwords did not match.".to_string(),
         ));
     }
 
@@ -202,13 +238,13 @@ pub async fn signup(
         let user: User = User::from_surreal_user(s_user, id);
         auth.login_user(user.id);
         auth.remember_user(remember.is_some());
+        leptos_axum::redirect("/");
+        Ok(())
     } else {
-        log!("User: {:?}", s_user);
+        Err(ServerFnError::ServerError(
+            "User_ID already exists, contact administrator!".to_string(),
+        ))
     }
-
-    leptos_axum::redirect("/");
-
-    Ok(())
 }
 
 #[server(Logout, "/api")]
@@ -225,21 +261,45 @@ type UserResource = Resource<(usize, usize, usize), Result<Option<User>, ServerF
 
 #[derive(Debug)]
 pub enum UserError {
-    Server(ServerFnError),
     GuestUser,
     NoneErr,
+    OtherServerError(ServerFnError),
+    NoUser,
+    // includes signup's pw stuff - those are useless in the frontend
+    BadPassword,
+    TakenName,
 }
 
 impl Display for UserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            UserError::Server(err) => write!(f, "{err}"),
+            UserError::OtherServerError(err) => write!(f, "{err}"),
             err => write!(f, "{err:?}"),
         }
     }
 }
 
 impl Error for UserError {}
+
+impl From<ServerFnError> for UserError {
+    fn from(err: ServerFnError) -> Self {
+        use UserError::*;
+        if let ServerFnError::ServerError(err) = &err {
+            if let Some(err) = err.split_once(": ").map(|e| e.0) {
+                match err {
+                    "NO_USER" => return NoUser,
+                    "BAD_PASSWORD"
+                    | "SHORT_PASSWORD"
+                    | "INVALID_PASSWORD"
+                    | "UNCONFIRMED_PASSWORD" => return BadPassword,
+                    "TAKEN_NAME" => return TakenName,
+                    _ => {}
+                };
+            }
+        }
+        OtherServerError(err)
+    }
+}
 
 pub fn with_user<F, T>(closure: F) -> Result<T, UserError>
 where
@@ -250,7 +310,7 @@ where
     user.with(|user| match user {
         Ok(Some(user)) => Ok(closure(user)),
         Ok(None) => Err(GuestUser),
-        Err(err) => Err(Server(err.clone())),
+        Err(err) => Err(err.clone().into()),
     })
     .ok_or(NoneErr)
     .and_then(|u| u)
@@ -294,35 +354,35 @@ pub fn UserButton(logout: Action<Logout, Result<(), ServerFnError>>) -> impl Int
 /// The login page
 #[component]
 pub fn LoginPage(login: Action<Login, Result<(), ServerFnError>>) -> impl IntoView {
-    // Creates a reactive value to update the button
-    let (count, set_count) = create_signal(0);
-    let on_click = move |_| set_count.update(|count| *count += 1);
+    let (name, set_name) = create_signal(String::new());
+    let (live_password, set_live_password) = create_signal(String::new());
+
+    let set_name = move |ev: Event| set_name(event_target_value(&ev));
+    let set_live_pw = move |ev: Event| {
+        set_live_password(event_target_value(&ev));
+    };
+
+    let disable_submit = move || name().is_empty() || live_password().is_empty();
 
     view! {
         <div class="login-container">
             <h2><Lang hu="Bejelentkezés" en="Login"/></h2>
             <ActionForm action=login>
-                <div class="input-group">
-                    <label for="username"><Lang hu="Felhasználónév" en="Username"/></label>
-                    <input type="text" id="username" name="username" required/>
-                </div>
-                <div class="input-group">
-                    <label for="password"><Lang hu="Jelszó" en="Password"/></label>
-                    <input type="password" id="password" name="password" required/>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="remember" name="remember"/>
-                    <label for="remember"><Lang hu="Emlékezz rám" en="Remember me"/></label>
-                </div>
-                <div class="input-group">
-                    <button type="submit"><Lang hu="Bejelentkezés" en="Log in"/></button>
-                </div>
+                <Input name="username" input=set_name change=|_|() >
+                    <Lang hu="Felhasználónév" en="Username"/>
+                </Input>
+                <Input name="" change=|_|() input=set_live_pw password=true >
+                    <Lang hu="Jelszó" en="Password"/>
+                </Input>
+                <RememberMe/>
+                <Submit disable=disable_submit >
+                        <Lang hu="Bejelentkezés" en="Log in"/>
+                </Submit>
             </ActionForm>
             <p class="signup-text"><a href="/signup">
                 <Lang hu="Regisztráció" en="Sign up"/>
             </a></p>
         </div>
-        <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
         <Transition fallback=||()>
         <ErrorBoundary
             fallback=move |err|
@@ -343,8 +403,15 @@ pub fn LoginPage(login: Action<Login, Result<(), ServerFnError>>) -> impl IntoVi
 /// The login page
 #[component]
 pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl IntoView {
+    let (name, set_name) = create_signal(String::new());
+
+    let set_name = move |ev: Event| set_name(event_target_value(&ev));
+
+    let MIN_PW_LEN: usize = 6;
+
     let (password, set_password) = create_signal(String::new());
     let (live_password, set_live_password) = create_signal(String::new());
+    let (live_password_confirm, set_live_password_confirm) = create_signal(String::new());
 
     let set_pw = move |ev: Event| {
         set_password(event_target_value(&ev));
@@ -352,11 +419,19 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
     let set_live_pw = move |ev: Event| {
         set_live_password(event_target_value(&ev));
     };
+    let set_live_pw_cnf = move |ev: Event| {
+        set_live_password_confirm(event_target_value(&ev));
+    };
 
-    let (name, set_name) = create_signal(String::new());
-
-    let set_name = move |ev: Event| set_name(event_target_value(&ev));
-    let valid_name = move || name() == name().trim();
+    let invalid_name = move || name() != name().trim();
+    let valid_pw_len = move || live_password().len() >= MIN_PW_LEN;
+    let valid_pw_chars = move || {
+        !live_password()
+            .chars()
+            .any(|c| c.is_whitespace() || !c.is_ascii())
+    };
+    let valid_pw = move || valid_pw_len() && valid_pw_chars();
+    let matching_pw = move || live_password() == live_password_confirm();
 
     let pw_strength = move || {
         let unit = match live_password().len() {
@@ -366,7 +441,7 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
             11..=13 => ("Szupertank", "Supertank"),
             14..=16 => ("Tengeralattjáró", "Submarine"),
             _ => (
-                "Tüzérség, \"A csata Királynője\" (vagy a jelszavaké..)",
+                "Tüzérség, \"A Csata Királynője\" (vagy a jelszavaké..)",
                 "Artillery, \"The Queen of Battle\" (or of passwords..)",
             ),
         };
@@ -375,46 +450,84 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
         }
     };
 
-    view! {
-        <div class="login-container">
-            <h2><Lang hu="Regisztráció" en="Signup"/></h2>
-            <ActionForm action=signup>
-                <div class="input-group">
-                    <label for="username"><Lang hu="Felhasználónév" en="Username"/></label>
-                    <input type="text" id="username" name="username" on:input=set_name required/>
-                </div>
-                <Show when=move||!valid_name() fallback=||()>
-                    <Alert header="".into()>
-                        <Lang hu="Név nem kezdődhet vagy végződhet szóközzel!"
-                            en="Name must not start or end with whitespace!"/>
-                    </Alert>
-                </Show>
-                <div class="input-group">
-                    <label for="password"><Lang hu="Jelszó" en="Password"/></label>
-                    <input type="password" id="password" name="password"
-                        on:change=set_pw on:input=set_live_pw required/>
-                </div>
-                <Show when={move || !password().is_empty() && password().len() < 6} fallback=||()>
-                    <Alert header="".into()>
+    let disable_submit = move || {
+        invalid_name()
+            || !valid_pw()
+            || !matching_pw()
+            || name().is_empty()
+            || password().is_empty()
+    };
+
+    let name_problems = move || {
+        view! {
+            <Show when=invalid_name fallback=||()>
+                <Alert header="">
+                    <Lang hu="Név nem kezdődhet vagy végződhet szóközzel!"
+                        en="Name must not start or end with whitespace!"/>
+                </Alert>
+            </Show>
+        }
+    };
+
+    let pw_problems = move || {
+        view! {
+                <Show
+                    when={move || !password().is_empty() && !valid_pw_len()}
+                    fallback=||()
+                >
+                    <Alert header="">
                         <Lang hu="Túl rövid a jelszó!"
                             en="Password is too short!"/>
                     </Alert>
                 </Show>
+                <Show
+                    when={move || !valid_pw_chars()}
+                    fallback=||()
+                >
+                    <Alert header="">
+                        <Lang hu="A jelszó nem tartalmazhat szóközt, illetve ASCII-n kívüli karaktert! (Pl. ékezetet)"
+                            en="The password may not contain whitespace, or non-ASCII characters! (Eg. accents)"/>
+                    </Alert>
+                </Show>
+        }
+    };
+
+    let pw_cnf_problems = move || {
+        view! {
+                <Show
+                    when={move || !live_password_confirm().is_empty() && !matching_pw()}
+                    fallback=||()
+                >
+                    <Alert header="">
+                        <Lang hu="Nem egyeznek meg a jelszavak!"
+                            en="Passwords do not match!"/>
+                    </Alert>
+                </Show>
+        }
+    };
+
+    view! {
+        <div class="login-container">
+            <h2><Lang hu="Regisztráció" en="Signup"/></h2>
+            <ActionForm action=signup>
+                <Input name="username" input=set_name change=|_|() >
+                    <Lang hu="Felhasználónév" en="Username"/>
+                </Input>
+                {name_problems}
+                <Input name="" change=set_pw input=set_live_pw password=true >
+                    <Lang hu="Jelszó" en="Password"/>
+                </Input>
+                {pw_problems}
                 <div class="pw-strength">{pw_strength}</div>
-                <div class="input-group">
-                    <label for="password_confirmation">
-                        <Lang hu="Jelszó újra" en="Password again"/>
-                    </label>
-                    <input type="password" id="password_confirmation"
-                        name="password_confirmation" required/>
-                </div>
-                <div class="checkbox-group">
-                    <input type="checkbox" id="remember" name="remember"/>
-                    <label for="remember"><Lang hu="Emlékezz rám" en="Remember me"/></label>
-                </div>
-                <div class="input-group">
-                    <button type="submit"><Lang hu="Regisztráció" en="Sign up"/></button>
-                </div>
+                <Input name="password_confirmation"
+                    change=|_|() input=set_live_pw_cnf password=true >
+                    <Lang hu="Jelszó újra" en="Password again"/>
+                </Input>
+                {pw_cnf_problems}
+                <RememberMe/>
+                <Submit disable=disable_submit>
+                    <Lang hu="Regisztráció" en="Sign up"/>
+                </Submit>
             </ActionForm>
         </div>
         <Transition fallback=||()>

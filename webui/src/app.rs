@@ -4,11 +4,10 @@ use leptos_meta::*;
 use leptos_router::*;
 
 mod game;
-pub mod lang;
 
 use crate::auth::*;
+use crate::lang::*;
 use game::*;
-use lang::*;
 
 #[component]
 pub fn App() -> impl IntoView {

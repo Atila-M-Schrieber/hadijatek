@@ -1,8 +1,10 @@
 use cfg_if::cfg_if;
 pub mod app;
 pub mod auth;
+pub mod components;
 pub mod error;
 pub mod fileserv;
+pub mod lang;
 
 cfg_if! { if #[cfg(feature = "ssr")] {
     use leptos::LeptosOptions;

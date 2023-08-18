@@ -76,13 +76,17 @@ pub fn ErrorTemplate(
 
 /// Alert for errors and warnings, provide either content or children
 #[component]
-pub fn Alert(
-    header: String,
-    #[prop(default = false)] warning: bool,
+pub fn Alert<S>(
+    header: S,
+    #[prop(optional)] warning: bool,
     #[prop(optional)] content: Option<String>,
     #[prop(optional)] children: Option<ChildrenFn>,
-) -> impl IntoView {
+) -> impl IntoView
+where
+    S: ToString + 'static,
+{
     let class: String = "alert ".to_string() + if !warning { "error" } else { "warning" };
+    let header = header.to_string();
     view! {
         <div class={class}>
         {if !header.is_empty() {

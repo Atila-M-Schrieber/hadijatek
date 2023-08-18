@@ -5,7 +5,7 @@
   padding: 20px 30px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   border-radius: 5px;
-  width: 300px;
+  width: 350px;
   margin: 0 auto;
   position: absolute;
   top: 50%;
@@ -30,6 +30,7 @@
   	    display: inline;
   		padding: 10px;
   	    vertical-align: middle; // To align it vertically with the label
+		accent-color: #ffcc00;
   	}
   }
 
@@ -37,6 +38,7 @@
     margin-bottom: 15px;
 
     label {
+    	font-size: 1.2rem;
         display: block;
         margin-bottom: 5px;
     }
@@ -58,7 +60,6 @@
         }
     }
 
-
     button {
         width: 100%;
         padding: 10px;
@@ -72,6 +73,15 @@
         &:hover {
             background-color: #e6b300;
         }
+
+	    &.disabled {
+        	background-color: #575757;  // Dull color
+        	cursor: not-allowed;  // Indicate the button cannot be clicked
+
+        	&:hover {
+        	    background-color: #575757;  // Ensure it remains dull even on hover
+        	}
+    	}
     }
 }
 
