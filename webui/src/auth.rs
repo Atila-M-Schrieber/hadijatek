@@ -1,5 +1,3 @@
-use std::{error::Error, fmt::Display};
-
 use crate::components::*;
 use crate::error::*;
 use crate::lang::*;
@@ -259,48 +257,7 @@ pub async fn logout() -> Result<(), ServerFnError> {
 
 type UserResource = Resource<(usize, usize, usize), Result<Option<User>, ServerFnError>>;
 
-#[derive(Debug)]
-pub enum UserError {
-    GuestUser,
-    NoneErr,
-    OtherServerError(ServerFnError),
-    NoUser,
-    // includes signup's pw stuff - those are useless in the frontend
-    BadPassword,
-    TakenName,
-}
-
-impl Display for UserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UserError::OtherServerError(err) => write!(f, "{err}"),
-            err => write!(f, "{err:?}"),
-        }
-    }
-}
-
-impl Error for UserError {}
-
-impl From<ServerFnError> for UserError {
-    fn from(err: ServerFnError) -> Self {
-        use UserError::*;
-        if let ServerFnError::ServerError(err) = &err {
-            if let Some(err) = err.split_once(": ").map(|e| e.0) {
-                match err {
-                    "NO_USER" => return NoUser,
-                    "BAD_PASSWORD"
-                    | "SHORT_PASSWORD"
-                    | "INVALID_PASSWORD"
-                    | "UNCONFIRMED_PASSWORD" => return BadPassword,
-                    "TAKEN_NAME" => return TakenName,
-                    _ => {}
-                };
-            }
-        }
-        OtherServerError(err)
-    }
-}
-
+/// Simplifies working with the user resource
 pub fn with_user<F, T>(closure: F) -> Result<T, UserError>
 where
     F: Fn(&User) -> T,
@@ -327,7 +284,6 @@ pub fn UserButton(logout: Action<Logout, Result<(), ServerFnError>>) -> impl Int
         >
         <ErrorBoundary
             fallback=move |_err| {
-                // log!{"User Button fallback err: {:?}", err.get()};
                 view!{
                     <a href="/login"><Lang hu="Bejelentkezés" en="Log in"/></a>}
             }
@@ -367,11 +323,12 @@ pub fn LoginPage(login: Action<Login, Result<(), ServerFnError>>) -> impl IntoVi
     view! {
         <div class="login-container">
             <h2><Lang hu="Bejelentkezés" en="Login"/></h2>
+            <UserErrorBoundary action=login />
             <ActionForm action=login>
-                <Input name="username" input=set_name change=|_|() >
+                <Input name="username" on:input=set_name >
                     <Lang hu="Felhasználónév" en="Username"/>
                 </Input>
-                <Input name="" change=|_|() input=set_live_pw password=true >
+                <Input name="" on:input=set_live_pw password=true >
                     <Lang hu="Jelszó" en="Password"/>
                 </Input>
                 <RememberMe/>
@@ -509,18 +466,19 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
     view! {
         <div class="login-container">
             <h2><Lang hu="Regisztráció" en="Signup"/></h2>
+            <UserErrorBoundary action=signup />
             <ActionForm action=signup>
-                <Input name="username" input=set_name change=|_|() >
+                <Input name="username" on:input=set_name >
                     <Lang hu="Felhasználónév" en="Username"/>
                 </Input>
                 {name_problems}
-                <Input name="" change=set_pw input=set_live_pw password=true >
+                <Input name="" on:change=set_pw on:input=set_live_pw password=true >
                     <Lang hu="Jelszó" en="Password"/>
                 </Input>
                 {pw_problems}
                 <div class="pw-strength">{pw_strength}</div>
                 <Input name="password_confirmation"
-                    change=|_|() input=set_live_pw_cnf password=true >
+                    on:input=set_live_pw_cnf password=true >
                     <Lang hu="Jelszó újra" en="Password again"/>
                 </Input>
                 {pw_cnf_problems}
@@ -530,6 +488,14 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
                 </Submit>
             </ActionForm>
         </div>
+        //<UserErrors action=signup >
+        //    <MatchUserError err=UserError::TakenName>
+        //        <Lang hu="Ez a felhasználónév foglalt" en="Username is taken" />
+        //    </MatchUserError>
+        //    <MatchUserError err=UserError::BadPassword>
+        //        <Lang hu="Nem megfelelő jelszó" en="Invalid password" />
+        //    </MatchUserError>
+        //</UserErrors>
         <Transition fallback=||()>
         <ErrorBoundary
             fallback=move |err|

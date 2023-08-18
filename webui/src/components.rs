@@ -10,18 +10,18 @@ use crate::lang::*;
 /// Takes the children as the label, and sets name= to every relevant thing.
 /// Currently always a required input.
 #[component]
-pub fn Input<S, FI, FC>(
+pub fn Input<S /* , FI, FC */>(
     name: S,
     children: ChildrenFn,
     #[prop(optional)] password: bool,
-    input: FI,
-    change: FC,
+    // input: FI,
+    // change: FC,
 ) -> impl IntoView
 where
     S: ToString,
     // Need different types because they're different closures
-    FI: Fn(Event) + 'static,
-    FC: Fn(Event) + 'static,
+    // FI: Fn(Event) + 'static,
+    // FC: Fn(Event) + 'static,
 {
     let mut name = name.to_string();
     if name.is_empty() {
@@ -35,7 +35,7 @@ where
         <div class="input-group">
             <label for=&name>{children()}</label>
             <input type=if password {"password"} else {"text"} id=&name name=&name
-                on:change=change on:input=input required/>
+                /* on:change=change on:input=input */ required/>
         </div>
     }
 }

@@ -1,5 +1,9 @@
+use std::fmt::Display;
+
+use crate::lang::*;
 use cfg_if::cfg_if;
 use http::status::StatusCode;
+use leptos::error::Error;
 use leptos::*;
 use thiserror::Error;
 
@@ -96,5 +100,116 @@ where
         {children}{content}
         </div>
         </div>
+    }
+}
+
+/// User-related errors
+#[derive(Debug, Clone, PartialEq)]
+pub enum UserError {
+    GuestUser,
+    NoneErr,
+    OtherServerError(ServerFnError),
+    NoUser,
+    // includes signup's pw stuff - those are useless in the frontend
+    BadPassword,
+    TakenName,
+}
+
+impl From<ServerFnError> for UserError {
+    fn from(err: ServerFnError) -> Self {
+        use UserError::*;
+        if let ServerFnError::ServerError(err) = &err {
+            if let Some(err) = err.split_once(": ").map(|e| e.0) {
+                match err {
+                    "NO_USER" => return NoUser,
+                    "BAD_PASSWORD"
+                    | "SHORT_PASSWORD"
+                    | "INVALID_PASSWORD"
+                    | "UNCONFIRMED_PASSWORD" => return BadPassword,
+                    "TAKEN_NAME" => return TakenName,
+                    _ => {}
+                };
+            }
+        }
+        OtherServerError(err)
+    }
+}
+
+impl Display for UserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UserError::OtherServerError(err) => write!(f, "{err}"),
+            err => write!(f, "{err:?}"),
+        }
+    }
+}
+
+impl std::error::Error for UserError {}
+
+/// Takes an action, and returns a Result, which can then be used in login/signup failures
+pub fn user_error<A>(action: Action<A, Result<(), ServerFnError>>) -> Result<(), UserError> {
+    if let Some(Err(err)) = action.value().get() {
+        Err(err.into())
+    } else {
+        // If all fine, or not yet called, no need for an error
+        Ok(())
+    }
+}
+
+//pub enum UserError {
+//    GuestUser,
+//    NoneErr,
+//    OtherServerError(ServerFnError),
+//    NoUser,
+//    // includes signup's pw stuff - those are useless in the frontend
+//    BadPassword,
+//    TakenName,
+//}
+#[component]
+pub fn UserErrorBoundary<A: 'static>(
+    action: Action<A, Result<(), ServerFnError>>,
+) -> impl IntoView {
+    // use UserError::*;
+
+    let err_text = move |err: Error| {
+        // let to = |err: UserError| Error::from(err);
+        match err.to_string().as_str() {
+            "GuestUser" => ("Vendégként tilos!", "Guests forbidden!"),
+            "NoneErr" => (
+                "Még nem töltődött be a felhasználó...",
+                "User still loading...",
+            ),
+            "NoUser" => ("Ismeretlen felhasználónév", "Unknown username"),
+            "BadPassword" => ("Hibás jelszó", "Incorrect password"),
+            "TakenName" => (
+                "Ez a felhasználónév már foglalt!",
+                "This username is taken!",
+            ),
+            // Includes OtherServerError
+            _ => (
+                "Ismeretlen hiba, szólj az adminisztrátornak!",
+                "Unknown error, contact the administrator!",
+            ),
+        }
+    };
+
+    let err = move |err: RwSignal<Errors>| {
+        let err_text = err
+            .get()
+            .iter()
+            .next()
+            .map(|(_, err)| err_text(err.clone()))
+            .unwrap_or(("", ""));
+        view! {
+            <Alert header="">
+                <Lang hu=err_text.0 en=err_text.1 />
+            </Alert>
+        }
+    };
+
+    view! {
+        <ErrorBoundary fallback=err>
+        {move || user_error(action)}
+        </ErrorBoundary>
     }
 }

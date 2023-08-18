@@ -24,8 +24,14 @@ if #[cfg(feature = "ssr")] {
     use axum_session::{SessionConfig, SessionLayer, SessionStore};
     use axum_session_auth::{AuthSessionLayer, AuthConfig, SessionSurrealPool};
 
-    async fn server_fn_handler(State(app_state): State<AppState>, auth_session: AuthSession, path: Path<String>, headers: HeaderMap, raw_query: RawQuery,
-    request: Request<AxumBody>) -> impl IntoResponse {
+    async fn server_fn_handler(
+        State(app_state): State<AppState>,
+        auth_session: AuthSession,
+        path: Path<String>,
+        headers: HeaderMap,
+        raw_query: RawQuery,
+        request: Request<AxumBody>
+    ) -> impl IntoResponse {
 
         log!("{:?}", path);
 
@@ -35,8 +41,13 @@ if #[cfg(feature = "ssr")] {
         }, request).await
     }
 
-    async fn leptos_routes_handler(auth_session: AuthSession, State(app_state): State<AppState>, req: Request<AxumBody>) -> Response{
-            let handler = leptos_axum::render_app_to_stream_with_context(app_state.leptos_options.clone(),
+    async fn leptos_routes_handler(
+        auth_session: AuthSession,
+        State(app_state): State<AppState>,
+        req: Request<AxumBody>
+    ) -> Response {
+            let handler =
+                leptos_axum::render_app_to_stream_with_context(app_state.leptos_options.clone(),
             move || {
                 provide_context(auth_session.clone());
                 provide_context(app_state.db.clone());
