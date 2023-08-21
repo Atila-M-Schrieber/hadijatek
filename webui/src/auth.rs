@@ -1,6 +1,10 @@
+use std::fmt::Debug;
+
 use crate::error::*;
 use crate::lang::*;
 use cfg_if::cfg_if;
+use chrono::offset::Utc;
+use chrono::DateTime;
 use leptos::*;
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +12,7 @@ cfg_if! { if #[cfg(feature = "ssr")] {
     use surrealdb::Surreal;
     use surrealdb::sql::Value;
     use surrealdb::sql::Thing;
+    use surrealdb::sql::Id;
     use surrealdb::engine::remote::ws::Client;
     use axum_session_auth::{SessionSurrealPool, Authentication};
     use bcrypt::{hash, verify, DEFAULT_COST};
@@ -40,9 +45,15 @@ impl Default for User {
     }
 }
 
+/// Tokens
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Token {
+    pub created: DateTime<Utc>,
+    pub token: String,
+}
+
 cfg_if! { if #[cfg(feature = "ssr")] {
     use async_trait::async_trait;
-
 
     #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
     pub struct SurrealUser {
@@ -145,6 +156,184 @@ cfg_if! { if #[cfg(feature = "ssr")] {
     }
 }}
 
+// gen/delete_token
+cfg_if! { if #[cfg(feature = "ssr")] {
+
+    /// Generates token on specified table
+    pub async fn gen_token(table: &str, db: &Surreal<Client>) -> Result<String, ServerFnError> {
+        db.use_ns("hadijatek").use_db("auth").await?;
+
+        let token = Id::rand().to_raw();
+
+        // log!("Creating token {token} on {table}");
+
+        // Without catching the value, it returns a server error.
+        // I assume it tries to become a Result<String, ...> insead of a Token
+        let _the_token: Token = db.create((table, &token))
+            .content(Token {
+                created: Utc::now(),
+                token: token.clone(),
+            })
+            .await?;
+
+        // dbg!(the_token);
+        // log!("Token created");
+
+        Ok(token)
+    }
+
+    /// Deletes token on spedified table
+    pub async fn delete_token(table: &str, token: &str, db: &Surreal<Client>) -> Result<(), ServerFnError> {
+        db.use_ns("hadijatek").use_db("auth").await?;
+
+        let _deleted_token: Option<Token> = db.delete((table, token)).await?;
+
+        Ok(())
+    }
+}}
+
+// get_consumer
+cfg_if! { if #[cfg(feature = "ssr")] {
+
+    /// Gets the consumer of a token
+    pub async fn get_consumer<T: for<'a> Deserialize<'a> + Debug>(
+        token_table: &str,
+        token: &str,
+        consumer_table: &str,
+        db: &Surreal<Client>
+    ) -> Result<Option<(T, DateTime<Utc>)>, ServerFnError> {
+        let query = format!("SELECT <-consume<-{consumer_table}.* FROM {token_table}:{token}");
+        let mut result = db
+            .query(query)
+            .await?;
+        // log!("consumption time result: {result:?}");
+
+        let consumer: Option<serde_json::Value> = result.take(0)?;
+        // log!("consumer Value: {consumer:#?}");
+
+        if let Some(consumer) = consumer {
+            // closure to be able to use ? syntax
+            /* let _consumer = || {
+                let consumer = consumer.get("<-consume");
+                log!("the <-consume bit: {consumer:#?}");
+                let consumer = consumer?.get(format!("<-{consumer_table}"));
+                log!("the <-user_token bit: {consumer:#?}");
+                let consumer = consumer?.get(0);
+                log!("the array indexing bit: {consumer:#?}");
+                let consumer = serde_json::from_value(consumer?.clone());
+                log!("the parse: {consumer:?}");
+                consumer.ok()
+            }; */
+            let consumer = || {
+                serde_json::from_value(
+                    consumer
+                    .get("<-consume")?
+                    .get(format!("<-{consumer_table}"))?
+                    .get(0)?
+                    .clone()
+                ).ok()
+            };
+
+            let consumer: Option<T> = consumer();
+
+            // log!("consumer option: {consumer:?}");
+
+            if consumer.is_some() {
+                let query = format!("SELECT VALUE <-consume.time FROM {token_table}:{token}");
+                let mut result = db
+                    .query(query)
+                    .await?;
+                // log!("consumption time result: {result:?}");
+                let time: Option<serde_json::Value> = result.take(0)?;
+                let time: Option<DateTime<Utc>> = time.and_then(|value|
+                    serde_json::from_value(value[0].clone()).ok()
+                );
+                // log!("time of consumption: {time:?}");
+                let time = time.ok_or(ServerFnError::ServerError("Consumer found, but no time!?".into()))?;
+
+                let consumer = consumer.map(|c| (c, time));
+
+                Ok(consumer)
+            } else {
+                Ok(None)
+            }
+        } else {
+            Err(ServerFnError::ServerError("No JSON Value returned!".into()))
+        }
+    }
+}}
+
+// consume_token
+cfg_if! { if #[cfg(feature = "ssr")] {
+
+    /// Consumes the appropriate token, by RELATE-ing it to the consumer
+    pub async fn consume_token<T: for<'a> Deserialize<'a> + Debug>(
+        token_table: &str,
+        token: &str,
+        consumer_table: &str,
+        consumer_id: &str,
+        db: &Surreal<Client>
+    ) -> Result<(), ServerFnError> {
+        db.use_ns("hadijatek").use_db("auth").await?;
+
+        let token_exists: Option<Token> = db.select((token_table, token)).await?;
+
+        if token_exists.is_none() {
+            return Err(ServerFnError::ServerError("BAD_TOKEN: Token not found".into()));
+        }
+
+        if get_consumer::<T>(token_table, token, consumer_table, db).await?.is_some() {
+            return Err(ServerFnError::ServerError("USED_TOKEN: This token has already been consumed".into()))
+        }
+
+        // go format! this
+        let query = format!(
+            "RELATE {consumer_table}:{consumer_id}->consume->{token_table}:{token} \
+            SET time=\"{}\"",
+            Utc::now(),
+        );
+        db.query(query).await?;
+
+        Ok(())
+    }
+}}
+
+// get_tokens
+cfg_if! { if #[cfg(feature = "ssr")] {
+
+    /// Fetches all tokens on a spicified table, with <T> as the type of relation.
+    /// Option is None if the token has not been consumed yet,
+    /// and the Some of the consumer and the time at which the consumption occured.
+    pub async fn get_tokens<T>(
+        token_table: &str,
+        consumer_table: &str,
+        db: &Surreal<Client>,
+    ) -> Result<Vec<(Token, Option<(T, DateTime<Utc>)>)>, ServerFnError>
+    where T: Serialize + for<'a> Deserialize<'a> + std::fmt::Debug {
+        db.use_ns("hadijatek").use_db("auth").await?;
+
+        let just_tokens: Vec<Token> = db.select(token_table).await?;
+
+        let mut tokens: Vec<(Token, Option<(T, DateTime<Utc>)>)> =
+            Vec::with_capacity(just_tokens.len());
+
+        for token in just_tokens.into_iter() {
+            let consumer = get_consumer(token_table, &token.token, consumer_table, db).await;
+            tokens.push((token, consumer?));
+        }
+
+        tokens
+            .sort_by(|(Token { created: t1, .. }, o1), (Token { created: t2, .. }, o2)|
+                match (o1, o2) {
+                    (None, Some(_)) => std::cmp::Ordering::Less,
+                    (Some(_), None) => std::cmp::Ordering::Greater,
+                    _ => t2.cmp(t1),
+                });
+
+        Ok(tokens)
+    }
+}}
+
 #[server(GetUser, "/api")]
 pub async fn get_user() -> Result<Option<User>, ServerFnError> {
     let auth = auth()?;
@@ -180,6 +369,7 @@ pub async fn login(
 
 #[server(Signup, "/api")]
 pub async fn signup(
+    user_creation_token: String,
     username: String,
     password: String,
     password_confirmation: String,
@@ -206,8 +396,6 @@ pub async fn signup(
         return Err(ServerFnError::ServerError(
             "TAKEN_NAME: User already exists!".to_string(),
         ));
-    } else {
-        log!("User {} does not yet exist, signing up...", &username);
     }
 
     if password != password_confirmation {
@@ -218,7 +406,9 @@ pub async fn signup(
 
     let password_hashed = hash(password, DEFAULT_COST).unwrap();
 
-    let id = surrealdb::sql::Id::rand().to_raw();
+    let id = Id::rand().to_raw();
+
+    consume_token::<SurrealUser>("user_token", &user_creation_token, "user", &id, &db).await?;
 
     let s_user: Result<SurrealUser, surrealdb::Error> = db
         .create(("user", &id))
@@ -229,9 +419,8 @@ pub async fn signup(
         })
         .await;
 
-    if let Ok(s_user) = s_user {
-        let user: User = User::from_surreal_user(s_user, id);
-        auth.login_user(user.id);
+    if s_user.is_ok() {
+        auth.login_user(id);
         auth.remember_user(remember.is_some());
         leptos_axum::redirect("/");
         Ok(())
@@ -250,6 +439,49 @@ pub async fn logout() -> Result<(), ServerFnError> {
     leptos_axum::redirect("/");
 
     Ok(())
+}
+
+#[server(CreateUserToken, "/api")]
+pub async fn create_user_token() -> Result<String, ServerFnError> {
+    let db = db()?;
+
+    gen_token("user_token", &db).await
+}
+
+#[server(DeleteUserToken, "/api")]
+pub async fn delete_user_token(token: String) -> Result<(), ServerFnError> {
+    let db = db()?;
+
+    delete_token("user_token", &token, &db).await
+}
+
+pub type UserCreationToken = (Token, Option<(User, DateTime<Utc>)>);
+
+#[server(GetUserTokenInfo, "/api")]
+pub async fn get_user_token_info() -> Result<Vec<UserCreationToken>, ServerFnError> {
+    let db = db()?;
+
+    pub type SurrealUserCreationToken = (Token, Option<(SurrealUser, DateTime<Utc>)>);
+
+    let source_tokens: Vec<SurrealUserCreationToken> =
+        get_tokens("user_token", "user", &db).await?;
+
+    let mut tokens = Vec::with_capacity(source_tokens.len());
+
+    for (token, maybeuser) in source_tokens.into_iter() {
+        let user = if let Some((s_user, time)) = maybeuser {
+            if let Some(user) = User::get_from_username(s_user.username, &db).await {
+                Some((user, time))
+            } else {
+                log!("Wtf"); // should never be reached
+                None
+            }
+        } else {
+            None
+        };
+        tokens.push((token, user));
+    }
+    Ok(tokens)
 }
 
 type UserResource = Resource<(usize, usize, usize), Result<Option<User>, ServerFnError>>;

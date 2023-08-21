@@ -1,0 +1,68 @@
+.token-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: Arial, sans-serif;
+    margin-top: 20px; // Space between the two tables
+	table-layout: fixed;
+
+
+    thead {
+        background-color: #232323;
+        color: white;
+        
+        th {
+            padding: 10px 15px;
+            border-bottom: 2px solid #575757;
+        }
+    }
+
+    tbody {
+        tr {
+            &:nth-child(even) {
+                background-color: #f5f5f5; // For alternating row colors
+            }
+            
+            td {
+                padding: 10px 15px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        }
+    }
+
+    button[type="submit"] {
+        margin-left: 10px;
+        padding: 5px 10px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        background-color: #e74c3c;
+        transition: background-color 0.3s;
+
+        &:hover {
+            background-color: #c0392b;
+        }
+    }
+
+    // This is for the tokens in the Active Tokens table
+    td.active {
+        cursor: pointer; // Indicate the token is clickable
+        color: #f6c301; // Adjusted the color to be less bright
+        font-style: italic; // Italicized the text
+
+        &:hover {
+            text-decoration: underline;
+        }
+
+		&:active {
+            color: #c09900; // Darkened color when clicked
+        }
+
+    }
+
+    // For tokens in the Consumed Tokens table
+    td.consumed {
+        color: #2c2c2c; // Dull out consumed tokens
+		font-style: bold;
+    }
+}
+

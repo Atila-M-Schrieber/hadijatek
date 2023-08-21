@@ -113,6 +113,8 @@ pub enum UserError {
     // includes signup's pw stuff - those are useless in the frontend
     BadPassword,
     TakenName,
+    BadToken,
+    UsedToken,
 }
 
 impl From<ServerFnError> for UserError {
@@ -127,6 +129,8 @@ impl From<ServerFnError> for UserError {
                     | "INVALID_PASSWORD"
                     | "UNCONFIRMED_PASSWORD" => return BadPassword,
                     "TAKEN_NAME" => return TakenName,
+                    "BAD_TOKEN" => return BadToken,
+                    "USED_TOKEN" => return UsedToken,
                     _ => {}
                 };
             }
@@ -156,42 +160,40 @@ pub fn user_error<A>(action: Action<A, Result<(), ServerFnError>>) -> Result<(),
     }
 }
 
-//pub enum UserError {
-//    GuestUser,
-//    NoneErr,
-//    OtherServerError(ServerFnError),
-//    NoUser,
-//    // includes signup's pw stuff - those are useless in the frontend
-//    BadPassword,
-//    TakenName,
-//}
 #[component]
 pub fn UserErrorBoundary<A: 'static>(
     action: Action<A, Result<(), ServerFnError>>,
 ) -> impl IntoView {
-    // use UserError::*;
+    use UserError::*;
 
-    let err_text = move |err: Error| {
+    let err_text = move |err: &Error| {
         // let to = |err: UserError| Error::from(err);
-        match err.to_string().as_str() {
-            "GuestUser" => ("Vendégként tilos!", "Guests forbidden!"),
-            "NoneErr" => (
+        let out = match err.downcast_ref::<UserError>().unwrap() {
+            GuestUser => ("Vendégként tilos!", "Guests forbidden!"),
+            NoneErr => (
                 "Még nem töltődött be a felhasználó...",
                 "User still loading...",
             ),
-            "NoUser" => ("Ismeretlen felhasználónév", "Unknown username"),
-            "BadPassword" => ("Hibás jelszó", "Incorrect password"),
-            "TakenName" => (
+            NoUser => ("Ismeretlen felhasználónév", "Unknown username"),
+            BadPassword => ("Hibás jelszó", "Incorrect password"),
+            TakenName => (
                 "Ez a felhasználónév már foglalt!",
                 "This username is taken!",
             ),
-            // Includes OtherServerError
-            // _ => (
-            //     "Ismeretlen hiba, szólj az adminisztrátornak!",
-            //     "Unknown error, contact the administrator!",
-            // ),
-            _ => ("", ""),
-        }
+            BadToken => ("Ismeretlen regisztrációs token!", "Unknown signup token!"),
+            UsedToken => (
+                "Ez a regisztrációs token már fel lett használva!",
+                "This signup token has been used!",
+            ),
+            OtherServerError(err) => {
+                log!("OtherServerError encoundered: {err}");
+                (
+                    "Ismeretlen hiba, add meg az adminisztrátornak, a hiba körülményeit, és hogy pontosan mikor történt!",
+                    "Unknown error, inform the administrator about the circumstances of the error, and the exact time!",
+                )
+            }
+        };
+        (out.0, out.1)
     };
 
     let err = move |err: RwSignal<Errors>| {
@@ -199,13 +201,13 @@ pub fn UserErrorBoundary<A: 'static>(
             .get()
             .iter()
             .next()
-            .map(|(_, err)| err_text(err.clone()))
+            .map(|(_, err)| err_text(err))
             .unwrap_or(("", ""));
         view! {
             <Show when=||!err_text.0.is_empty() fallback=||()>
-            <Alert header="">
-                <Lang hu=err_text.0 en=err_text.1 />
-            </Alert>
+                <Alert header="">
+                    <Lang hu=err_text.0 en=err_text.1 />
+                </Alert>
             </Show>
         }
     };

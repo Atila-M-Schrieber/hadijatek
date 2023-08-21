@@ -73,3 +73,29 @@ pub fn Submit<F: Fn() -> bool + Copy + 'static>(disable: F, children: ChildrenFn
         </div>
     }
 }
+
+/// Table component, which takes children as the <th/>,
+/// a list of items (stored values at the moment),
+/// and a function which turns said items into rows.
+#[component]
+pub fn Table<T: Clone + 'static, F: Fn(T) -> IV + std::clone::Clone + 'static, IV: IntoView>(
+    items: StoredValue<Vec<T>>,
+    to_row: F,
+    children: ChildrenFn,
+) -> impl IntoView {
+    let to_row = store_value(to_row);
+    view! {
+        <Show when=move||!items.with_value(|v| v.is_empty()) fallback=||()>
+            <table class="token-table" >
+                <thead>
+                    <tr>
+                     {children()}
+                    </tr>
+                </thead>
+                <tbody>
+                    {move||items.get_value().into_iter().map(to_row.get_value()).collect_view()}
+                </tbody>
+            </table>
+        </Show>
+    }
+}

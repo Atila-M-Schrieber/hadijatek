@@ -1,4 +1,6 @@
 /target/
 /**/*.svg
 /**/*.hmap
+/**/*.db
 *.session
+

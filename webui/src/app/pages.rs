@@ -1,4 +1,8 @@
 //! Pages that come directly from App
+
+use chrono::offset::Local;
+use chrono::offset::Utc;
+use chrono::DateTime;
 use leptos::ev::Event;
 use leptos::*;
 use leptos_router::*;
@@ -74,9 +78,20 @@ pub fn LoginPage(login: Action<Login, Result<(), ServerFnError>>) -> impl IntoVi
 /// The login page
 #[component]
 pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl IntoView {
+    // Bool to see if it's been changed
+    let (token, set_token) = create_signal((String::new(), false)); // prevents empty token warning
+    let (live_token, set_live_token) = create_signal(String::new());
+
+    let activate_token = move || set_token.update(|(_, active)| *active = true); // enable warning
+    let set_token = move |ev: Event| set_token((event_target_value(&ev), true));
+    let set_live_token = move |ev: Event| set_live_token(event_target_value(&ev));
+
     let (name, set_name) = create_signal(String::new());
 
-    let set_name = move |ev: Event| set_name(event_target_value(&ev));
+    let set_name = move |ev: Event| {
+        activate_token();
+        set_name(event_target_value(&ev))
+    };
 
     let MIN_PW_LEN: usize = 6;
 
@@ -88,12 +103,22 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
         set_password(event_target_value(&ev));
     };
     let set_live_pw = move |ev: Event| {
+        activate_token();
         set_live_password(event_target_value(&ev));
     };
     let set_live_pw_cnf = move |ev: Event| {
+        activate_token();
         set_live_password_confirm(event_target_value(&ev));
     };
 
+    let empty_token = move || token().0.is_empty() && token().1;
+    let bad_length_token = move || token().0.len() != 20 && token().1;
+    let bad_live_length_token = move || live_token().len() != 20;
+    let invalid_token = move || {
+        live_token()
+            .chars()
+            .any(|c| !('a'..='z').contains(&c) && !('0'..='9').contains(&c))
+    };
     let invalid_name = move || name() != name().trim();
     let valid_pw_len = move || live_password().len() >= MIN_PW_LEN;
     let valid_pw_chars = move || {
@@ -103,6 +128,12 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
     };
     let valid_pw = move || valid_pw_len() && valid_pw_chars();
     let matching_pw = move || live_password() == live_password_confirm();
+    let wont_be_matching_pw = move || {
+        let live_password_confirm = live_password_confirm();
+        let len = live_password_confirm.len();
+        let live_password = live_password();
+        len > live_password.len() || &live_password[..len] != &live_password_confirm
+    };
 
     let pw_strength = move || {
         let unit = match live_password().len() {
@@ -122,11 +153,37 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
     };
 
     let disable_submit = move || {
-        invalid_name()
+        empty_token()
+            || bad_live_length_token()
+            || invalid_token()
+            || invalid_name()
             || !valid_pw()
             || !matching_pw()
             || name().is_empty()
             || password().is_empty()
+    };
+
+    let token_problems = move || {
+        view! {
+            <Show when=empty_token fallback=||()>
+                <Alert header="" warning=true >
+                    <Lang hu="Regisztrációhoz kell token! Ha nincs, kérj az adminisztrátortól!"
+                        en="You may only sign up with a user creation token! You may ask the administrator to issue you a token."/>
+                </Alert>
+            </Show>
+            <Show when=move || !empty_token() && bad_length_token() fallback=||()>
+                <Alert header="">
+                    <Lang hu="A token hossza 20 karakter!"
+                        en="The token's length must be 20 characters!"/>
+                </Alert>
+            </Show>
+            <Show when=invalid_token fallback=||()>
+                <Alert header="">
+                    <Lang hu="A token csak a-z közötti ékezet nélküli karaktereket, és 0-9 közötti karaktereket tartalmazhat!"
+                        en="The token may only contain characters a-z or 0-9 (ASCII - no accents)!"/>
+                </Alert>
+            </Show>
+        }
     };
 
     let name_problems = move || {
@@ -166,7 +223,7 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
     let pw_cnf_problems = move || {
         view! {
                 <Show
-                    when={move || !live_password_confirm().is_empty() && !matching_pw()}
+                    when={move || !live_password_confirm().is_empty() && wont_be_matching_pw()}
                     fallback=||()
                 >
                     <Alert header="">
@@ -182,6 +239,10 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
             <h2><Lang hu="Regisztráció" en="Signup"/></h2>
             <UserErrorBoundary action=signup />
             <ActionForm action=signup>
+                <Input name="user_creation_token" on:change=set_token on:input=set_live_token >
+                    <Lang hu="Regisztrációs token" en="User creation token"/>
+                </Input>
+                {token_problems}
                 <Input name="username" on:input=set_name >
                     <Lang hu="Felhasználónév" en="Username"/>
                 </Input>
@@ -219,11 +280,10 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
     }
 }
 
-/// The admin settings page
+/// The settings page - admin / regular
 #[component]
 pub fn SettingsPage() -> impl IntoView {
-    let user_role = move || with_user(|user| user.role).ok();
-    let is_admin = move || user_role() == Some(UserRole::Admin);
+    let is_admin = move || with_user(|user| user.role) == Ok(UserRole::Admin);
 
     view! {
         <Show when=is_admin fallback=RegularSettingsPage>
@@ -250,8 +310,112 @@ pub fn AdminSettingsPage() -> impl IntoView {
     let (count, set_count) = create_signal(0);
     let on_click = move |_| set_count.update(|count| *count += 1);
 
+    let create_user_token = create_server_action::<CreateUserToken>();
+    let delete_user_token = create_server_action::<DeleteUserToken>();
+
+    let user_tokens = create_resource(
+        move || {
+            (
+                create_user_token.version().get(),
+                delete_user_token.version().get(),
+            )
+        },
+        move |_| get_user_token_info(),
+    );
+
+    let list_tokens = move || -> Result<View, ServerFnError> {
+        let mut tokens = user_tokens
+            .read()
+            .ok_or(ServerFnError::ServerError("bruh".into()))??;
+
+        let used_tokens =
+            if let Some(pos) = tokens.iter().position(|(_, consumer)| consumer.is_some()) {
+                tokens.split_off(pos)
+            } else {
+                Vec::new()
+            };
+
+        let tokens_store = store_value(tokens);
+        let used_tokens_store = store_value(used_tokens);
+
+        let to_row = move |(token, consumer): UserCreationToken| {
+            let consumer = store_value(consumer);
+            let consumer = move || consumer.get_value();
+            let token = store_value(token);
+            let token = move || token.get_value();
+
+            let class = if consumer().is_none() {
+                "active"
+            } else {
+                "consumed"
+            };
+
+            let time =
+                |t: DateTime<Utc>| t.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string();
+
+            // copy-on-click
+            let copy_token = move |_| {
+                let window = window();
+                let _written = window
+                    .navigator()
+                    .clipboard()
+                    .expect("Clipboard not found")
+                    .write_text(&token().token);
+            };
+
+            view! {
+                <tr>
+                    <td class=class title="Copy" on:click=copy_token >
+                            {token().token}
+                    </td>
+                    <td>{time(token().created)}</td>
+                    <td>{consumer().map(|(user, _)| user.username)}</td>
+                    <td><Show when=move||consumer().is_none()
+                            fallback=move||consumer().map(|(_, t)| time(t)) >
+                            <ActionForm action=delete_user_token>
+                                <input type="hidden" name="token" value=token().token />
+                                <Submit disable=||false >
+                                    <Lang hu="Törlés"
+                                        en="Delete" />
+                                </Submit>
+                            </ActionForm>
+                        </Show>
+                    </td>
+                </tr>
+            }
+        };
+
+        Ok(view! {
+            <Table items=tokens_store to_row=to_row >
+                <th><Lang hu="Token" en="Token" /></th>
+                <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
+                <th><Lang hu="" en="" /></th>
+                <th><Lang hu="Törlés" en="Delet" /></th>
+            </Table>
+            <Table items=used_tokens_store to_row=to_row >
+                <th><Lang hu="Token" en="Token" /></th>
+                <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
+                <th><Lang hu="Felhasználó" en="User" /></th>
+                <th><Lang hu="Felhasználás ideje" en="Consumption Time" /></th>
+            </Table>
+        }
+        .into_view())
+    };
+
     view! {
         <h1>"Welcome to Admin Settings!"</h1>
         <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
+        <ActionForm action=create_user_token>
+            <Submit disable=||false >
+                <Lang hu="Új regisztráció-token létrehozása" en="Create signup token" />
+            </Submit>
+        </ActionForm>
+        <Transition fallback=move || view! {
+            <p><Lang hu="Tokenek betöltése.." en="Loading tokens..."/></p>
+        }>
+            <ErrorBoundary fallback=|_| view!{<p>"Something's gone wrong :("</p>}>
+                {list_tokens}
+            </ErrorBoundary>
+        </Transition>
     }
 }
