@@ -213,17 +213,6 @@ cfg_if! { if #[cfg(feature = "ssr")] {
 
         if let Some(consumer) = consumer {
             // closure to be able to use ? syntax
-            /* let _consumer = || {
-                let consumer = consumer.get("<-consume");
-                log!("the <-consume bit: {consumer:#?}");
-                let consumer = consumer?.get(format!("<-{consumer_table}"));
-                log!("the <-user_token bit: {consumer:#?}");
-                let consumer = consumer?.get(0);
-                log!("the array indexing bit: {consumer:#?}");
-                let consumer = serde_json::from_value(consumer?.clone());
-                log!("the parse: {consumer:?}");
-                consumer.ok()
-            }; */
             let consumer = || {
                 serde_json::from_value(
                     consumer
@@ -438,6 +427,24 @@ pub async fn logout() -> Result<(), ServerFnError> {
     auth.logout_user();
     leptos_axum::redirect("/");
 
+    Ok(())
+}
+
+#[server(ChangeUserInfo, "/api")]
+pub async fn change_user_info(
+    username: String,
+    password: String,
+    new_username: Option<String>,
+    new_password: Option<String>,
+    new_password_confirmation: Option<String>,
+    as_admin: bool,
+) -> Result<(), ServerFnError> {
+    dbg!(username);
+    dbg!(password);
+    dbg!(new_username);
+    dbg!(new_password);
+    dbg!(new_password_confirmation);
+    dbg!(as_admin);
     Ok(())
 }
 

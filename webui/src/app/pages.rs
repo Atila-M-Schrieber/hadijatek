@@ -284,10 +284,13 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
 #[component]
 pub fn SettingsPage() -> impl IntoView {
     let is_admin = move || with_user(|user| user.role) == Ok(UserRole::Admin);
+    let logged_in = move || with_user(|_| ()).is_ok();
 
     view! {
-        <Show when=is_admin fallback=RegularSettingsPage>
-            <AdminSettingsPage/>
+        <Show when=logged_in fallback=||()>
+            <Show when=is_admin fallback=RegularSettingsPage>
+                <AdminSettingsPage/>
+            </Show>
         </Show>
     }
 }
@@ -301,6 +304,13 @@ pub fn RegularSettingsPage() -> impl IntoView {
     view! {
         <h1>"Welcome to Regular Settings!"</h1>
         <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
+
+        <h2><Lang hu="Felhasználói beállítások" en="User settings"/></h2>
+        <ErrorBoundary fallback=|_| "Some user error occurred" >
+        {move || with_user(|user| view!{
+            <UserSettings user=user.clone() />
+        })}
+        </ErrorBoundary>
     }
 }
 
@@ -310,6 +320,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
     let (count, set_count) = create_signal(0);
     let on_click = move |_| set_count.update(|count| *count += 1);
 
+    // User tokens
     let create_user_token = create_server_action::<CreateUserToken>();
     let delete_user_token = create_server_action::<DeleteUserToken>();
 
@@ -402,20 +413,55 @@ pub fn AdminSettingsPage() -> impl IntoView {
         .into_view())
     };
 
+    let (is_user_tokens_expanded, set_is_user_tokens_expanded) = create_signal(false);
+    let (is_map_tokens_expanded, set_is_map_tokens_expanded) = create_signal(false);
+
+    let expand_user_tokens = move |_| set_is_user_tokens_expanded.update(|i_e| *i_e = !*i_e);
+    let expand_map_tokens = move |_| set_is_map_tokens_expanded.update(|i_e| *i_e = !*i_e);
+
     view! {
         <h1>"Welcome to Admin Settings!"</h1>
         <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
-        <ActionForm action=create_user_token>
-            <Submit disable=||false >
-                <Lang hu="Új regisztráció-token létrehozása" en="Create signup token" />
-            </Submit>
-        </ActionForm>
-        <Transition fallback=move || view! {
-            <p><Lang hu="Tokenek betöltése.." en="Loading tokens..."/></p>
-        }>
-            <ErrorBoundary fallback=|_| view!{<p>"Something's gone wrong :("</p>}>
-                {list_tokens}
-            </ErrorBoundary>
-        </Transition>
+        <div class="panel" class:expanded=is_user_tokens_expanded >
+            <div class="panel-heading" on:click=expand_user_tokens >
+                <span class="arrow-icon">">"</span>" "
+                <Lang hu="Regisztrációs tokenek" en="User creation tokens"/>
+            </div>
+            <div class="panel-content" >
+                <ActionForm action=create_user_token class="create-token-form" >
+                    <Submit disable=||false >
+                        <Lang hu="Új regisztrációs token létrehozása" en="Create signup token" />
+                    </Submit>
+                </ActionForm>
+                <Transition fallback=move || view! {
+                    <p><Lang hu="Tokenek betöltése.." en="Loading tokens..."/></p>
+                }>
+                    <ErrorBoundary fallback=|_| view!{<p>"Something's gone wrong :("</p>}>
+                        {list_tokens}
+                    </ErrorBoundary>
+                </Transition>
+            </div>
+        </div>
+        <div class="panel" class:expanded=is_map_tokens_expanded >
+            <div class="panel-heading" on:click=expand_map_tokens >
+                <span class="arrow-icon">">"</span>" "
+                <Lang hu="Térkép-előállítási tokenek" en="Map creation tokens"/>
+            </div>
+            <div class="panel-content" >
+                TODO
+                //<ActionForm action=create_user_token class="create-token-form" >
+                //    <Submit disable=||false >
+                //        <Lang hu="Új térkép token létrehozása" en="Create map token" />
+                //    </Submit>
+                //</ActionForm>
+                //<Transition fallback=move || view! {
+                //    <p><Lang hu="Tokenek betöltése.." en="Loading tokens..."/></p>
+                //}>
+                //    <ErrorBoundary fallback=|_| view!{<p>"Something's gone wrong :("</p>}>
+                //        {list_tokens}
+                //    </ErrorBoundary>
+                //</Transition>
+            </div>
+        </div>
     }
 }
