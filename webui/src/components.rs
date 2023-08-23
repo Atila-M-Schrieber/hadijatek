@@ -188,7 +188,8 @@ pub fn UserSettings(
     user: crate::auth::User,
     #[prop(default = false)] as_admin: bool,
 ) -> impl IntoView {
-    let user_settings = create_server_action::<crate::auth::ChangeUserInfo>();
+    let user_settings =
+        expect_context::<Action<crate::auth::ChangeUserInfo, Result<(), ServerFnError>>>();
 
     let username = store_value(user.username);
     let username = move || username.get_value();
@@ -320,11 +321,11 @@ pub fn UserSettings(
             <input type="hidden" name="as_admin" prop:value=as_admin />
             <input type="hidden" name="username" prop:value=username() />
             <Show when=username_change fallback=move || view!{
-                <button class="change-username" on:click=change_username >
+                <button type="button" class="change-username" on:click=change_username >
                     <Lang hu="Felhasználónév módosítása" en="Change username"/>
                 </button>
             }>
-                <button class="change-username" on:click=change_username >
+                <button type="button" class="change-username" on:click=change_username >
                     <Lang hu="Felhasználónév módosításának elhagyása" en="Cancel username change"/>
                 </button>
                 <Input name="new_username" on:input=set_name >
@@ -335,11 +336,11 @@ pub fn UserSettings(
                 {name_problems}
             </Show>
             <Show when=password_change fallback=move || view!{
-                <button class="change-password" on:click=change_password >
+                <button type="button" class="change-password" on:click=change_password >
                     <Lang hu="Jelszó megváltoztatása" en="Change password" />
                 </button>
             }>
-                <button class="change-password" on:click=change_password >
+                <button type="button" class="change-password" on:click=change_password >
                     <Lang hu="Jelszó megváltoztatásának elhagyása" en="Cancel password change" />
                 </button>
                 <Input name="new_password" password=true

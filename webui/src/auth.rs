@@ -82,27 +82,27 @@ cfg_if! { if #[cfg(feature = "ssr")] {
             }
         }
 
-        pub async fn get(id: String, db: &Surreal<Client>) -> Option<Self> {
+        pub async fn get(id: &str, db: &Surreal<Client>) -> Option<Self> {
             db.use_ns("hadijatek").use_db("auth").await.ok()?;
 
-            let s_user = db.select(("user", &id)).await.ok()?;
+            let s_user = db.select(("user", id)).await.ok()?;
 
-            Some(User::from_surreal_user(s_user, id))
+            Some(User::from_surreal_user(s_user, id.to_string()))
         }
 
-        pub async fn get_from_username(name: String, db: &Surreal<Client>) -> Option<Self> {
+        pub async fn get_from_username(name: &str, db: &Surreal<Client>) -> Option<Self> {
             db.use_ns("hadijatek").use_db("auth").await.ok()?;
 
             let mut id = db
                 .query("SELECT id FROM user WHERE username = $username")
-                .bind(("username", &name))
+                .bind(("username", name))
                 .await.ok()?;
             // log!("reached query: {id:#?}");
             let id: Option<Thing> = id.take("id").ok()?;
             // log!("reached opt<string>: {id:?}");
             let id: String = Value::from(id?).to_string()[5..].to_string();
             // log!("reached string: {id:?}");
-            Self::get(id, db).await
+            Self::get(&id, db).await
         }
 
         pub async fn name_taken(name: &str, db: &Surreal<Client>) -> Result<bool, surrealdb::Error> {
@@ -127,7 +127,7 @@ cfg_if! { if #[cfg(feature = "ssr")] {
         ) -> Result<User, anyhow::Error> {
             let pool = pool.unwrap();
 
-            User::get(userid, pool)
+            User::get(&userid, pool)
                 .await
                 .ok_or_else(|| anyhow::anyhow!("Cannot get user"))
         }
@@ -339,7 +339,7 @@ pub async fn login(
     let db = db()?;
     let auth = auth()?;
 
-    let user: User = User::get_from_username(username, &db)
+    let user: User = User::get_from_username(&username, &db)
         .await
         .ok_or_else(|| ServerFnError::ServerError("NO_USER: User does not exist.".into()))?;
 
@@ -439,12 +439,108 @@ pub async fn change_user_info(
     new_password_confirmation: Option<String>,
     as_admin: bool,
 ) -> Result<(), ServerFnError> {
-    dbg!(username);
-    dbg!(password);
-    dbg!(new_username);
-    dbg!(new_password);
-    dbg!(new_password_confirmation);
-    dbg!(as_admin);
+    let db = db()?;
+    let auth = auth()?;
+
+    // shouldn't happen
+    let user = User::get_from_username(&username, &db)
+        .await
+        .ok_or(ServerFnError::ServerError(format!(
+            "USER_NOT_FOUND: no user by the name of {username} exists"
+        )))?;
+
+    let current_user = &auth.current_user;
+
+    if !as_admin && Some(&username) != current_user.clone().map(|user| user.username).as_ref() {
+        return Err(ServerFnError::ServerError(
+            "WRONG_USER: There is a mismatch between the username and the current user.".into(),
+        ));
+    }
+
+    if as_admin
+        && current_user
+            .clone()
+            .map(|user| user.role == UserRole::Admin)
+            != Some(true)
+    {
+        return Err(ServerFnError::ServerError(
+            "NICE_TRY: You're not the admin, dumbass.".into(),
+        ));
+    }
+
+    if !verify(password, &user.password)? {
+        return Err(ServerFnError::ServerError(
+            "BAD_PASSWORD: Password does not match.".into(),
+        ));
+    }
+
+    if let Some(new_username) = new_username {
+        log!("{username} is changing their username to {new_username}");
+        let user_exists = User::name_taken(&new_username, &db).await?;
+        if user_exists {
+            return Err(ServerFnError::ServerError(
+                "TAKEN_NAME: User already exists!".to_string(),
+            ));
+        }
+
+        #[derive(Serialize)]
+        struct Username {
+            username: String,
+        }
+
+        let _new_user: Option<SurrealUser> = db
+            .update(("user", &user.id))
+            .merge(Username {
+                username: new_username,
+            })
+            .await?;
+    }
+
+    if let (Some(new_password), Some(new_password_confirmation)) =
+        (new_password, new_password_confirmation)
+    {
+        log!("{username} is changing their password");
+        const MIN_PW_LEN: usize = 6;
+
+        if new_password.len() < MIN_PW_LEN {
+            return Err(ServerFnError::ServerError(
+                "SHORT_PASSWORD: Password is too short.".to_string(),
+            ));
+        }
+        if new_password
+            .chars()
+            .any(|c| c.is_whitespace() || !c.is_ascii())
+        {
+            return Err(ServerFnError::ServerError(
+                "INVALID_PASSWORD: Password contains whitespace, or non-ASCII chars.".to_string(),
+            ));
+        }
+
+        if new_password != new_password_confirmation {
+            return Err(ServerFnError::ServerError(
+                "UNCONFIRMED_PASSWORD: Passwords did not match.".to_string(),
+            ));
+        }
+
+        let new_password_hashed = hash(new_password, DEFAULT_COST).unwrap();
+
+        #[derive(Serialize)]
+        struct Password {
+            password: String,
+        }
+
+        let _new_user: Option<SurrealUser> = db
+            .update(("user", &user.id))
+            .merge(Password {
+                password: new_password_hashed,
+            })
+            .await?;
+    }
+
+    auth.logout_user();
+
+    leptos_axum::redirect("/");
+
     Ok(())
 }
 
@@ -477,7 +573,7 @@ pub async fn get_user_token_info() -> Result<Vec<UserCreationToken>, ServerFnErr
 
     for (token, maybeuser) in source_tokens.into_iter() {
         let user = if let Some((s_user, time)) = maybeuser {
-            if let Some(user) = User::get_from_username(s_user.username, &db).await {
+            if let Some(user) = User::get_from_username(&s_user.username, &db).await {
                 Some((user, time))
             } else {
                 log!("Wtf"); // should never be reached
@@ -491,7 +587,7 @@ pub async fn get_user_token_info() -> Result<Vec<UserCreationToken>, ServerFnErr
     Ok(tokens)
 }
 
-type UserResource = Resource<(usize, usize, usize), Result<Option<User>, ServerFnError>>;
+type UserResource = Resource<(usize, usize, usize, usize), Result<Option<User>, ServerFnError>>;
 
 /// Simplifies working with the user resource
 pub fn with_user<F, T>(closure: F) -> Result<T, UserError>

@@ -23,6 +23,9 @@ pub fn App() -> impl IntoView {
     let login = create_server_action::<Login>();
     let logout = create_server_action::<Logout>();
     let signup = create_server_action::<Signup>();
+    let change_info = create_server_action::<ChangeUserInfo>();
+
+    provide_context(change_info);
 
     let user = create_resource(
         move || {
@@ -30,6 +33,7 @@ pub fn App() -> impl IntoView {
                 login.version().get(),
                 logout.version().get(),
                 signup.version().get(),
+                change_info.version().get(),
             )
         },
         move |_| get_user(),
