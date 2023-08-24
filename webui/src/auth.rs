@@ -46,7 +46,7 @@ impl Default for User {
 }
 
 /// Tokens
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Token {
     pub created: DateTime<Utc>,
     pub token: String,
@@ -194,7 +194,6 @@ cfg_if! { if #[cfg(feature = "ssr")] {
 
 // get_consumer
 cfg_if! { if #[cfg(feature = "ssr")] {
-
     /// Gets the consumer of a token
     pub async fn get_consumer<T: for<'a> Deserialize<'a> + Debug>(
         token_table: &str,
@@ -252,8 +251,26 @@ cfg_if! { if #[cfg(feature = "ssr")] {
     }
 }}
 
-// consume_token
+// verify/consume_token
 cfg_if! { if #[cfg(feature = "ssr")] {
+    pub async fn verify_token<T: for<'a> Deserialize<'a> + Debug>(
+        token_table: &str,
+        token: &str,
+        consumer_table: &str,
+        db: &Surreal<Client>
+    ) -> Result<(), ServerFnError> {
+        let token_exists: Option<Token> = db.select((token_table, token)).await?;
+
+        if token_exists.is_none() {
+            return Err(ServerFnError::ServerError("BAD_TOKEN: Token not found".into()));
+        }
+
+        if get_consumer::<T>(token_table, token, consumer_table, db).await?.is_some() {
+            return Err(ServerFnError::ServerError("USED_TOKEN: This token has already been consumed".into()))
+        }
+
+        Ok(())
+    }
 
     /// Consumes the appropriate token, by RELATE-ing it to the consumer
     pub async fn consume_token<T: for<'a> Deserialize<'a> + Debug>(
@@ -265,15 +282,7 @@ cfg_if! { if #[cfg(feature = "ssr")] {
     ) -> Result<(), ServerFnError> {
         db.use_ns("hadijatek").use_db("auth").await?;
 
-        let token_exists: Option<Token> = db.select((token_table, token)).await?;
-
-        if token_exists.is_none() {
-            return Err(ServerFnError::ServerError("BAD_TOKEN: Token not found".into()));
-        }
-
-        if get_consumer::<T>(token_table, token, consumer_table, db).await?.is_some() {
-            return Err(ServerFnError::ServerError("USED_TOKEN: This token has already been consumed".into()))
-        }
+        verify_token::<T>(token_table, token, consumer_table, db).await?;
 
         // go format! this
         let query = format!(

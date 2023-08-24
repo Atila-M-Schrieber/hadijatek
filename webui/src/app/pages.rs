@@ -7,6 +7,7 @@ use leptos::ev::Event;
 use leptos::*;
 use leptos_router::*;
 
+use crate::app::game::map::*;
 use crate::auth::*;
 use crate::components::*;
 use crate::error::*;
@@ -334,7 +335,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
         move |_| get_user_token_info(),
     );
 
-    let list_tokens = move || -> Result<View, ServerFnError> {
+    let list_user_tokens = move || -> Result<View, ServerFnError> {
         let mut tokens = user_tokens
             .read()
             .ok_or(ServerFnError::ServerError("bruh".into()))??;
@@ -401,13 +402,133 @@ pub fn AdminSettingsPage() -> impl IntoView {
                 <th><Lang hu="Token" en="Token" /></th>
                 <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
                 <th><Lang hu="" en="" /></th>
-                <th><Lang hu="Törlés" en="Delet" /></th>
+                <th><Lang hu="Törlés" en="Delete" /></th>
             </Table>
             <Table items=used_tokens_store to_row=to_row >
                 <th><Lang hu="Token" en="Token" /></th>
                 <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
                 <th><Lang hu="Felhasználó" en="User" /></th>
                 <th><Lang hu="Felhasználás ideje" en="Consumption Time" /></th>
+            </Table>
+        }
+        .into_view())
+    };
+
+    // Map tokens
+    let create_map_token = create_server_action::<CreateMapToken>();
+    let delete_map_token = create_server_action::<DeleteMapToken>();
+
+    let map_tokens = create_resource(
+        move || {
+            (
+                create_map_token.version().get(),
+                delete_map_token.version().get(),
+            )
+        },
+        move |_| get_map_token_info(),
+    );
+
+    let list_map_tokens = move || -> Result<View, ServerFnError> {
+        let mut tokens = map_tokens
+            .read()
+            .ok_or(ServerFnError::ServerError("bruh".into()))??;
+
+        let mut claimed_tokens = if let Some(pos) = tokens
+            .iter()
+            .position(|(_, _, consumer)| consumer.is_some())
+        {
+            tokens.split_off(pos)
+        } else {
+            Vec::new()
+        };
+
+        let used_tokens = if let Some(pos) = tokens
+            .iter()
+            .position(|(_, consumer, _)| consumer.is_some())
+        {
+            claimed_tokens.split_off(pos)
+        } else {
+            Vec::new()
+        };
+
+        let tokens_store = store_value(tokens);
+        let used_tokens_store = store_value(used_tokens);
+
+        let to_row = move |(token, map_consumer, user_consumer): MapCreationToken| {
+            let token = store_value(token);
+            let token = move || token.get_value();
+            let map_consumer = store_value(map_consumer);
+            let map_consumer = move || map_consumer.get_value();
+            let user_consumer = store_value(user_consumer);
+            let user_consumer = move || user_consumer.get_value();
+
+            let class = if user_consumer().is_none() {
+                "active"
+            } else {
+                "consumed"
+            };
+
+            let time =
+                |t: DateTime<Utc>| t.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string();
+
+            // copy-on-click
+            let copy_token = move |_| {
+                let window = window();
+                let _written = window
+                    .navigator()
+                    .clipboard()
+                    .expect("Clipboard not found")
+                    .write_text(&token().token);
+            };
+
+            view! {
+                <tr>
+                    <td class=class title="Copy" on:click=copy_token >
+                            {token().token}
+                    </td>
+                    <td>{time(token().created)}</td>
+                    <td>{map_consumer().map(|(map, _)| map.0)}</td>
+                    <td>{map_consumer().map(|(_, t)| time(t))}</td>
+                    <td>{user_consumer().map(|(user, _)| user.username)}</td>
+                    <td><Show when=move||user_consumer().is_none()
+                            fallback=move||user_consumer().map(|(_, t)| time(t)) >
+                            <ActionForm action=delete_map_token>
+                                <input type="hidden" name="token" value=token().token />
+                                <Submit disable=||false >
+                                    <Lang hu="Törlés"
+                                        en="Delete" />
+                                </Submit>
+                            </ActionForm>
+                        </Show>
+                    </td>
+                </tr>
+            }
+        };
+
+        Ok(view! {
+            <Table items=tokens_store to_row=to_row >
+                <th><Lang hu="Token" en="Token" /></th>
+                <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
+                <th><Lang hu="" en="" /></th>
+                <th><Lang hu="" en="" /></th>
+                <th><Lang hu="" en="" /></th>
+                <th><Lang hu="Törlés" en="Delete" /></th>
+            </Table>
+            <Table items=used_tokens_store to_row=to_row >
+                <th><Lang hu="Token" en="Token" /></th>
+                <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
+                <th><Lang hu="Térkép" en="Map" /></th>
+                <th><Lang hu="Felhasználás ideje" en="Consumption Time" /></th>
+                <th><Lang hu="Felhasználó" en="User" /></th>
+                <th><Lang hu="Igénybevétel ideje" en="Claim Time" /></th>
+            </Table>
+            <Table items=used_tokens_store to_row=to_row >
+                <th><Lang hu="Token" en="Token" /></th>
+                <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
+                <th><Lang hu="Térkép" en="Map" /></th>
+                <th><Lang hu="Felhasználás ideje" en="Consumption Time" /></th>
+                <th><Lang hu="Felhasználó" en="User" /></th>
+                <th><Lang hu="Igénybevétel ideje" en="Claim Time" /></th>
             </Table>
         }
         .into_view())
@@ -437,7 +558,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
                     <p><Lang hu="Tokenek betöltése.." en="Loading tokens..."/></p>
                 }>
                     <ErrorBoundary fallback=|_| view!{<p>"Something's gone wrong :("</p>}>
-                        {list_tokens}
+                        {list_user_tokens}
                     </ErrorBoundary>
                 </Transition>
             </div>
@@ -448,19 +569,18 @@ pub fn AdminSettingsPage() -> impl IntoView {
                 <Lang hu="Térkép-előállítási tokenek" en="Map creation tokens"/>
             </div>
             <div class="panel-content" >
-                TODO
-                //<ActionForm action=create_user_token class="create-token-form" >
-                //    <Submit disable=||false >
-                //        <Lang hu="Új térkép token létrehozása" en="Create map token" />
-                //    </Submit>
-                //</ActionForm>
-                //<Transition fallback=move || view! {
-                //    <p><Lang hu="Tokenek betöltése.." en="Loading tokens..."/></p>
-                //}>
-                //    <ErrorBoundary fallback=|_| view!{<p>"Something's gone wrong :("</p>}>
-                //        {list_tokens}
-                //    </ErrorBoundary>
-                //</Transition>
+                <ActionForm action=create_map_token class="create-token-form" >
+                    <Submit disable=||false >
+                        <Lang hu="Új térkép token létrehozása" en="Create map token" />
+                    </Submit>
+                </ActionForm>
+                <Transition fallback=move || view! {
+                    <p><Lang hu="Tokenek betöltése.." en="Loading tokens..."/></p>
+                }>
+                    <ErrorBoundary fallback=|_| view!{<p>"Something's gone wrong :("</p>}>
+                        {list_map_tokens}
+                    </ErrorBoundary>
+                </Transition>
             </div>
         </div>
     }
