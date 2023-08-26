@@ -1,185 +1,58 @@
-//! General-use components
+// Separate things into files without it seeming separate
 
-use leptos::ev::Event;
-use leptos::html::Input;
-use leptos::*;
-use leptos_router::*;
+pub use chrono::offset::Local;
+pub use chrono::offset::Utc;
+pub use chrono::DateTime;
+pub use leptos::ev::Event;
+pub use leptos::*;
+pub use leptos_router::*;
 
-use crate::error::*;
-use crate::lang::*;
+pub use crate::app::components::*;
+pub use crate::auth::{
+    token::{map::*, user::*},
+    *,
+};
+pub use crate::error::*;
+pub use crate::lang::*;
 
-/// Generic text input component.
-/// Takes the children as the label, and sets name= to every relevant thing.
-/// Currently always a required input.
+mod login;
+pub use login::*;
+mod signup;
+pub use signup::*;
+mod settings;
+pub use settings::*;
+
+/// The login button
 #[component]
-pub fn Input<S>(
-    name: S,
-    children: ChildrenFn,
-    #[prop(optional)] value: String,
-    #[prop(optional)] password: bool,
-    #[prop(optional)] focus_on_show: bool,
-) -> impl IntoView
-where
-    S: ToString,
-{
-    let mut name = name.to_string();
-    if name.is_empty() {
-        if password {
-            name = "password".into();
-        } else {
-            panic!("You must provide a name for non-password inputs!");
-        }
-    }
-
-    // focus the main input on load
-    let input_ref = create_node_ref::<Input>();
-    create_effect(move |_| {
-        if focus_on_show {
-            if let Some(input) = input_ref.get() {
-                // So inside, we wait a tick for the browser to mount it, then .focus()
-                request_animation_frame(move || {
-                    let _ = input.focus();
-                });
+pub fn UserButton(logout: Action<Logout, Result<(), ServerFnError>>) -> impl IntoView {
+    view! {
+        <Transition fallback=move||
+            view!{
+                <Lang hu="Bejelentkezés..." en="Loging in..."/>
             }
-        }
-    });
-
-    view! {
-        <div class="input-group">
-            <label for=&name>{children()}</label>
-            <input type=if password {"password"} else {"text"} id=&name name=&name value=&value
-                node_ref=input_ref required/>
-        </div>
-    }
-}
-
-/// EditableInput - button that doubles as input - click to change.
-/// When a button, it has a hidden input to pass along its current value
-#[component]
-pub fn EditableInput<S, F>(
-    name: S,
-    /// The value of the input by default
-    value: String,
-    /// Signal that determines the state of the button - RwSignal
-    toggle: RwSignal<bool>,
-    input: F,
-    children: ChildrenFn,
-) -> impl IntoView
-where
-    S: ToString + Clone + IntoAttribute + 'static,
-    F: Fn(Event) + Copy + 'static,
-{
-    let toggled = move || toggle.get();
-    let manual_toggle = move || toggle.update(|t| *t = !*t);
-    // let toggle = move |_| toggle.update(|t| *t = !*t);
-
-    let (entering, set_entering) = create_signal(true);
-    let enter = move |_| set_entering.set_untracked(true);
-    let exit = move |_| set_entering.set_untracked(false);
-
-    let toggle = move |_| {
-        toggle.update(|t| *t = !*t);
-        log!("ent: {}, tog: {}", entering(), toggled());
-    };
-
-    create_effect(move |_| log!("ent: {}, tog: {}", entering(), toggled()));
-
-    let (new_value, set_new_value) = create_signal(value.clone());
-    let set_new_value = move |ev: Event| set_new_value(event_target_value(&ev));
-
-    let value = store_value(value);
-    let value = move || value.get_value();
-    let name = store_value(name);
-    let name = move || name.get_value();
-    let children = store_value(children);
-
-    // If the input is the same as the initial new_value, toggle back to button mode
-    create_effect(move |_| {
-        if toggled() {
-            if new_value() == value() && !entering() {
-                manual_toggle();
+        >
+        <ErrorBoundary
+            fallback=move |_err| {
+                view!{
+                    <a href="/login"><Lang hu="Bejelentkezés" en="Log in"/></a>}
             }
+        >
+        {
+            move || { with_user(|user| {
+                view!{
+                    <a href="/settings">
+                        <Lang hu="Beállítások" en="Settings"/>" ("{user.username.clone()}")"
+                    </a>
+                    <div class="dropdown-content">
+                        <a href="#" on:click=move|_|logout.dispatch(Logout {})>
+                            <Lang hu="Kijelentkezés" en="Log out"/>
+                        </a>
+                    </div>
+                }
+            })}
         }
-    });
-
-    let button = move || {
-        view! {
-            {children.with_value(|c| c())}": "
-            <button on:click=move |ev| toggle(ev.clone())/* ; enter(ev) */ >
-                {value()}
-            </button>
-            // <input type="hidden" name=name() value=value()/>
-        }
-    };
-
-    view! {
-        <Show when=toggled fallback=button >
-            <Input name=name() value=value()
-                on:change=set_new_value on:input=input
-                on:focus=enter on:focusout=exit focus_on_show=true >
-                {children.with_value(|c| c())}
-            </Input>
-        </Show>
-    }
-}
-
-/// Remember Me checkbox. Comes with handy "please remember me".
-#[component]
-pub fn RememberMe() -> impl IntoView {
-    let (checked, set_checked) = create_signal(true);
-    let check = move |_ev: Event| {
-        set_checked.update(|b| *b = !*b);
-    };
-
-    view! {
-        <div class="checkbox-group">
-            <input type="checkbox" id="remember" name="remember" on:input=check checked/>
-            <label for="remember"><Lang hu="Emlékezz rám" en="Remember me"/></label>
-        </div>
-        <Show when=move||!checked() fallback=||()>
-            <Alert header="" warning=true >
-                <Lang hu="Nem akarlak elfelejteni 🥺" en="I don't want to forget you 🥺" />
-            </Alert>
-        </Show>
-    }
-}
-
-/// Submit component, with a "disable" signal.
-/// Takes children as the label
-#[component]
-pub fn Submit<F: Fn() -> bool + Copy + 'static>(disable: F, children: ChildrenFn) -> impl IntoView {
-    view! {
-        <div class="input-group">
-            <button type="submit" class:disabled=disable disabled=disable >
-                {children()}
-            </button>
-        </div>
-    }
-}
-
-/// Table component, which takes children as the <th/>,
-/// a list of items (stored values at the moment),
-/// and a function which turns said items into rows.
-#[component]
-pub fn Table<T: Clone + 'static, F: Fn(T) -> IV + std::clone::Clone + 'static, IV: IntoView>(
-    items: StoredValue<Vec<T>>,
-    to_row: F,
-    children: ChildrenFn,
-) -> impl IntoView {
-    let to_row = store_value(to_row);
-    view! {
-        <Show when=move||!items.with_value(|v| v.is_empty()) fallback=||()>
-            <table class="token-table" >
-                <thead>
-                    <tr>
-                     {children()}
-                    </tr>
-                </thead>
-                <tbody>
-                    {move||items.get_value().into_iter().map(to_row.get_value()).collect_view()}
-                </tbody>
-            </table>
-        </Show>
+        </ErrorBoundary>
+        </Transition>
     }
 }
 
@@ -237,7 +110,7 @@ pub fn UserSettings(
         let live_password_confirm = live_password_confirm();
         let len = live_password_confirm.len();
         let live_password = live_new_password();
-        len > live_password.len() || &live_password[..len] != &live_password_confirm
+        len > live_password.len() || live_password[..len] != live_password_confirm
     };
 
     let pw_strength = move || {
@@ -376,5 +249,26 @@ pub fn UserSettings(
             </Show>
         </ActionForm>
         </div>
+    }
+}
+
+/// Remember Me checkbox. Comes with handy "please remember me".
+#[component]
+pub fn RememberMe() -> impl IntoView {
+    let (checked, set_checked) = create_signal(true);
+    let check = move |_ev: Event| {
+        set_checked.update(|b| *b = !*b);
+    };
+
+    view! {
+        <div class="checkbox-group">
+            <input type="checkbox" id="remember" name="remember" on:input=check checked/>
+            <label for="remember"><Lang hu="Emlékezz rám" en="Remember me"/></label>
+        </div>
+        <Show when=move||!checked() fallback=||()>
+            <Alert header="" warning=true >
+                <Lang hu="Nem akarlak elfelejteni 🥺" en="I don't want to forget you 🥺" />
+            </Alert>
+        </Show>
     }
 }

@@ -3,13 +3,13 @@ use leptos::*;
 use leptos_meta::*;
 use leptos_router::*;
 
+mod account;
+mod components;
 mod game;
-mod pages;
 
 use crate::auth::*;
-use crate::lang::*;
+use account::*;
 use game::*;
-use pages::*;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -47,8 +47,52 @@ pub fn App() -> impl IntoView {
     // let is_regular = move || user_role() == Some(UserRole::Regular);
     let is_guest = move || !logged_in();
 
-    // The navigation bar - Home, Games (dropdown), right - Login/User
-    let nav_bar = view! {
+    view! {
+
+
+        // injects a stylesheet into the document <head>
+        // id=leptos means cargo-leptos will hot-reload this stylesheet
+        <Stylesheet id="leptos" href="/pkg/webui.css"/>
+
+        // sets the document title
+        <Title text="Hadijáték"/>
+
+        <Router fallback=|| {
+            let mut outside_errors = Errors::default();
+            outside_errors.insert_with_default_key(AppError::NotFound);
+            view! {
+                <ErrorTemplate outside_errors/>
+            }
+            .into_view()
+        }>
+            <NavBar logout=logout set_lang=set_lang />
+            <main>
+                <Routes>
+                    <Route path="/" view=HomePage/>
+                    <ProtectedRoute path="/login" redirect_path="/" condition=is_guest
+                        view=move || view!{<LoginPage login=login/>}/>
+                    <ProtectedRoute path="/signup" redirect_path="/" condition=is_guest
+                        view=move || view!{<SignupPage signup=signup/>}/>
+                    <ProtectedRoute path="/settings" redirect_path="/" condition=logged_in
+                        view=SettingsPage />
+                    <Route path="/game" view=GamesPage>
+                        // <Route path="no-guests" view=NoGuestsPage/>
+                        <Route path=":game" view=GamePage/> // redirect to no-guests if needed
+                        <Route path="" view=NoGamePage/>
+                    </Route>
+                </Routes>
+            </main>
+        </Router>
+    }
+}
+
+#[component]
+fn NavBar(
+    logout: Action<Logout, Result<(), ServerFnError>>,
+    set_lang: WriteSignal<Language>,
+) -> impl IntoView {
+    view! {
+        <nav class="navbar">
         <div class="container">
             <div class="left-section">
             <a href="/" class="logo">Hadijáték</a>
@@ -79,45 +123,18 @@ pub fn App() -> impl IntoView {
             </ul>
             </div>
         </div>
-    };
+        </nav>
+    }
+}
+
+#[component]
+pub fn HomePage() -> impl IntoView {
+    // Creates a reactive value to update the button
+    let (count, set_count) = create_signal(0);
+    let on_click = move |_| set_count.update(|count| *count += 1);
 
     view! {
-
-
-        // injects a stylesheet into the document <head>
-        // id=leptos means cargo-leptos will hot-reload this stylesheet
-        <Stylesheet id="leptos" href="/pkg/webui.css"/>
-
-        // sets the document title
-        <Title text="Hadijáték"/>
-
-        <Router fallback=|| {
-            let mut outside_errors = Errors::default();
-            outside_errors.insert_with_default_key(AppError::NotFound);
-            view! {
-                <ErrorTemplate outside_errors/>
-            }
-            .into_view()
-        }>
-            <nav class="navbar">
-                {nav_bar}
-            </nav>
-            <main>
-                <Routes>
-                    <Route path="/" view=HomePage/>
-                    <ProtectedRoute path="/login" redirect_path="/" condition=is_guest
-                        view=move || view!{<LoginPage login=login/>}/>
-                    <ProtectedRoute path="/signup" redirect_path="/" condition=is_guest
-                        view=move || view!{<SignupPage signup=signup/>}/>
-                    <ProtectedRoute path="/settings" redirect_path="/" condition=logged_in
-                        view=SettingsPage />
-                    <Route path="/game" view=GamesPage>
-                        // <Route path="no-guests" view=NoGuestsPage/>
-                        <Route path=":game" view=GamePage/> // redirect to no-guests if needed
-                        <Route path="" view=NoGamePage/>
-                    </Route>
-                </Routes>
-            </main>
-        </Router>
+        <h1>"Welcome to Hadijáték!"</h1>
+        <button on:click=on_click><Lang hu="Nyomjá'meg" en="Click Me"/>": " {count}</button>
     }
 }
