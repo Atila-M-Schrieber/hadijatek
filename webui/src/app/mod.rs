@@ -9,7 +9,7 @@ mod game;
 
 use crate::auth::*;
 use account::*;
-use game::*;
+use game::{map::*, *};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -75,6 +75,12 @@ pub fn App() -> impl IntoView {
                         view=move || view!{<SignupPage signup=signup/>}/>
                     <ProtectedRoute path="/settings" redirect_path="/" condition=logged_in
                         view=SettingsPage />
+                    <Route path="/map" view=MapsPage>
+                        // <Route path="no-guests" view=NoGuestsPage/>
+                        <Route path="create" view=CreateMapPage/> // redirect to no-guests if needed
+                        <Route path=":map" view=MapPage/> // redirect to no-guests if needed
+                        <Route path="" view=NoMapPage/>
+                    </Route>
                     <Route path="/game" view=GamesPage>
                         // <Route path="no-guests" view=NoGuestsPage/>
                         <Route path=":game" view=GamePage/> // redirect to no-guests if needed
@@ -102,6 +108,18 @@ fn NavBar(
                     <div class="dropdown-content">
                         <a href="/game/test">test</a>
                         <a href="/game/game2">Game 2</a>
+                    </div>
+                </li>
+            </ul>
+            <ul class="nav-list">
+                <li>
+                    <a href="/game"><Lang hu="Térképek" en="Maps"/></a>
+                    <div class="dropdown-content">
+                        <a href="/map/create">
+                            <Lang hu="Új térkép" en="Create map" />
+                        </a>
+                        <a href="/map/test">test</a>
+                        <a href="/map/map2">Map 2</a>
                     </div>
                 </li>
             </ul>

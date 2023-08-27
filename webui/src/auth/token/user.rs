@@ -5,6 +5,8 @@ use leptos::*;
 use super::*;
 use crate::auth::*;
 
+pub type UserCreationToken = (Token, Option<(User, DateTime<Utc>)>);
+
 #[server(CreateUserToken, "/api")]
 pub async fn create_user_token() -> Result<String, ServerFnError> {
     let db = db()?;
@@ -18,8 +20,6 @@ pub async fn delete_user_token(token: String) -> Result<(), ServerFnError> {
 
     delete_token("user_token", &token, &db).await
 }
-
-pub type UserCreationToken = (Token, Option<(User, DateTime<Utc>)>);
 
 #[server(GetUserTokenInfo, "/api")]
 pub async fn get_user_token_info() -> Result<Vec<UserCreationToken>, ServerFnError> {

@@ -42,7 +42,7 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
     let invalid_token = move || {
         live_token()
             .chars()
-            .any(|c| c.is_ascii_lowercase() ^ c.is_ascii_digit())
+            .any(|c| c.is_ascii_lowercase() == c.is_ascii_digit())
     };
     let invalid_name = move || name() != name().trim();
     let valid_pw_len = move || live_password().len() >= MIN_PW_LEN;
@@ -204,4 +204,3 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
         </Transition>
     }
 }
-

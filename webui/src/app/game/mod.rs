@@ -5,6 +5,8 @@ use web_sys::SvgElement;
 
 use crate::lang::*;
 
+pub mod map;
+
 #[component]
 pub fn GamesPage() -> impl IntoView {
     // Creates a reactive value to update the button

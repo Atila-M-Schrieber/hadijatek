@@ -180,10 +180,10 @@ pub fn UserErrorBoundary<A: 'static>(
                 "Ez a felhasználónév már foglalt!",
                 "This username is taken!",
             ),
-            BadToken => ("Ismeretlen regisztrációs token!", "Unknown signup token!"),
+            BadToken => ("Ismeretlen token!", "Unknown token!"),
             UsedToken => (
-                "Ez a regisztrációs token már fel lett használva!",
-                "This signup token has been used!",
+                "Ez a token már fel lett használva!",
+                "This token has been used!",
             ),
             OtherServerError(err) => {
                 log!("OtherServerError encoundered: {err}");

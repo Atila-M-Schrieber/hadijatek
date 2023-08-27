@@ -137,7 +137,6 @@ pub async fn consume_token<T: for<'a> Deserialize<'a> + Debug>(
 
     verify_token::<T>(token_table, token, consumer_table, db).await?;
 
-    // go format! this
     let query = format!(
         "RELATE {consumer_table}:{consumer_id}->consume->{token_table}:{token} \
             SET time=\"{}\"",

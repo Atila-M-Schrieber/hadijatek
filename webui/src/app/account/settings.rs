@@ -171,6 +171,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
         };
 
         let tokens_store = store_value(tokens);
+        let claimed_tokens_store = store_value(claimed_tokens);
         let used_tokens_store = store_value(used_tokens);
 
         let to_row = move |(token, map_consumer, user_consumer): MapCreationToken| {
@@ -233,11 +234,11 @@ pub fn AdminSettingsPage() -> impl IntoView {
                 <th><Lang hu="" en="" /></th>
                 <th><Lang hu="Törlés" en="Delete" /></th>
             </Table>
-            <Table items=used_tokens_store to_row=to_row >
+            <Table items=claimed_tokens_store to_row=to_row >
                 <th><Lang hu="Token" en="Token" /></th>
                 <th><Lang hu="Létrehozás ideje" en="Creation Time" /></th>
-                <th><Lang hu="Térkép" en="Map" /></th>
-                <th><Lang hu="Felhasználás ideje" en="Consumption Time" /></th>
+                <th><Lang hu="" en="" /></th>
+                <th><Lang hu="" en="" /></th>
                 <th><Lang hu="Felhasználó" en="User" /></th>
                 <th><Lang hu="Igénybevétel ideje" en="Claim Time" /></th>
             </Table>

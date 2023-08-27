@@ -9,6 +9,15 @@ use serde::{Deserialize, Serialize};
 use super::*;
 use crate::auth::*;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Map(pub String);
+
+pub type MapCreationToken = (
+    Token,
+    Option<(Map, DateTime<Utc>)>,
+    Option<(User, DateTime<Utc>)>,
+);
+
 #[server(CreateMapToken, "/api")]
 pub async fn create_map_token() -> Result<String, ServerFnError> {
     let db = db()?;
@@ -23,14 +32,17 @@ pub async fn delete_map_token(token: String) -> Result<(), ServerFnError> {
     delete_token("map_token", &token, &db).await
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Map(pub String);
+#[server(ClaimMapToken, "/api")]
+pub async fn claim_map_token(token: String) -> Result<(), ServerFnError> {
+    let db = db()?;
+    let auth = auth()?;
 
-pub type MapCreationToken = (
-    Token,
-    Option<(Map, DateTime<Utc>)>,
-    Option<(User, DateTime<Utc>)>,
-);
+    let user = auth.current_user.ok_or(ServerFnError::ServerError(
+        "NO_USER: You must be logged in to create a map.".into(),
+    ))?;
+
+    consume_token::<SurrealUser>("map_token", &token, "user", &user.id, &db).await
+}
 
 #[server(GetMapTokenInfo, "/api")]
 pub async fn get_map_token_info() -> Result<Vec<MapCreationToken>, ServerFnError> {
