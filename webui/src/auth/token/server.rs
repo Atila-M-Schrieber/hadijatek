@@ -18,7 +18,7 @@ pub async fn gen_token(table: &str, db: &Surreal<Client>) -> Result<String, Serv
 
     // Without catching the value, it returns a server error.
     // I assume it tries to become a Result<String, ...> insead of a Token
-    let _the_token: Token = db
+    let _the_token: Option<Token> = db
         .create((table, &token))
         .content(Token {
             created: Utc::now(),

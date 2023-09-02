@@ -79,8 +79,7 @@ pub fn SignupPage(signup: Action<Signup, Result<(), ServerFnError>>) -> impl Int
 
     let disable_submit = move || {
         empty_token()
-            || bad_live_length_token()
-            || invalid_token()
+            || ((bad_live_length_token() || invalid_token()) && &live_token() != "admin")
             || invalid_name()
             || !valid_pw()
             || !matching_pw()

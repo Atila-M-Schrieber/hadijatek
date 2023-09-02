@@ -1,7 +1,10 @@
-use crate::app::*;
+use crate::app::{account::token::Token, *};
+use js_sys::Uint8Array;
+use leptos::html::Div;
+use leptos_use::*;
+use web_sys::File;
 
 // put claim token in show, need current_token resource
-//
 #[component]
 pub fn CreateMapPage() -> impl IntoView {
     let claim_token = create_server_action::<ClaimMapToken>();
@@ -12,35 +15,134 @@ pub fn CreateMapPage() -> impl IntoView {
         move |_| get_map_token_info(),
     );
 
+    // The user's currently claimed & not consumed token (Option<Token>)
     let my_map_token = move || {
-        map_tokens.read().map(|tokens| {
-            tokens.map(|tokens| {
+        map_tokens.get().and_then(|tokens| {
+            tokens.ok().and_then(|tokens| {
                 tokens
                     .into_iter()
-                    .filter(|(_, map, user)| {
+                    .find(|(_, map, user)| {
                         map.is_none()
                             && Ok(true)
                                 == with_user(|u| {
                                     Some(true) == user.as_ref().map(|(user, _)| user == u)
                                 })
                     })
-                    .next()
                     .map(|(token, _, _)| token)
             })
         })
     };
 
-    let have_token = move || my_map_token().map(|t| t.map(|t| t.is_some())) == Some(Ok(true));
+    let have_token = move || my_map_token().is_some();
 
+    // file upload: leptos-use's use_drop_zone
+    // create server action/event? that sends svg when "upload" is pressed
+    // maybe do some pre-processing on the svg - ie. valid or not, display it first?
     view! {
         <h1>"Welcome to the CreateMap Page!"</h1>
         <Transition fallback=||"Loading..." >
         <ErrorBoundary fallback=|_|"Encountered error" >
         <Show when=have_token fallback=move||view!{<ClaimToken claim_token=claim_token/>} >
-        <Lang hu="térképkészítés" en="map creation" />
+            <Lang hu="térképkészítés" en="map creation" />
+            <ClientOnly>
+                <UploadInkscapeSVG token=Signal::derive(my_map_token) />
+            </ClientOnly>
+            "\nother stuff..."
         </Show>
         </ErrorBoundary>
         </Transition>
+    }
+}
+
+async fn get_file_string(file: Option<File>) -> Result<String, String> {
+    let file = if let Some(file) = file {
+        file
+    } else {
+        return Err("no file".into());
+    };
+
+    let name = file.name();
+    if !name.ends_with(".svg") {
+        return Err("Not an svg".into());
+    }
+
+    let js_future = wasm_bindgen_futures::JsFuture::from(file.array_buffer());
+    let jsval = js_future.await.unwrap();
+    let arr: Uint8Array = Uint8Array::new(&jsval);
+    let data: Vec<u8> = arr.to_vec();
+
+    // the errror should eventually be an alert
+    String::from_utf8(data).map_err(|err| format!("{err}"))
+}
+
+#[server(ProcessFile, "/api")]
+async fn process_file(file_string: Option<String>) -> Result<String, ServerFnError> {
+    if let Some(file_string) = file_string {
+        if file_string.find("<script").is_some() {
+            return Err(ServerFnError::ServerError("NO SCRIPT TAGS ALLOWED!".into()));
+        }
+        Ok(file_string)
+    } else {
+        // Err(ServerFnError::ServerError("no file string".into()))
+        Ok(String::new())
+    }
+}
+
+#[component]
+fn UploadInkscapeSVG(token: Signal<Option<Token>>) -> impl IntoView {
+    let drop_zone = create_node_ref::<Div>();
+
+    let (file, set_file) = create_signal(None);
+
+    let file_string = create_local_resource(file, |file| get_file_string(file));
+    let processed_file = create_resource(
+        move || file_string.get().and_then(Result::ok),
+        |maybefile| process_file(maybefile),
+    );
+
+    let on_drop = move |event: UseDropZoneEvent| {
+        let file = if !event.files.is_empty() {
+            Some(event.files[0].clone())
+        } else {
+            None
+        };
+        set_file(file);
+    };
+
+    let UseDropZoneReturn {
+        is_over_drop_zone,
+        files,
+    } = use_drop_zone_with_options(drop_zone, UseDropZoneOptions::default().on_drop(on_drop));
+
+    view! {
+        <div class="parent-container" >
+        <div node_ref=drop_zone class="drop-zone" class:dropped=move||file.with(|f| f.is_some())
+            class:active=is_over_drop_zone >
+            <Lang hu="EJTSD IDE A TÉRKÉPET (jelenleg a select nem működik)"
+                en="DROP HERE (for now selecting in the menu when you click doesn't work)" />
+            {/*<input type="file" node_ref=file_select accept=".svg" style="display:none;" />*/}
+        </div>
+        </div>
+
+        <Suspense fallback=||view!{"No file string yet"}>
+        {move || processed_file.map(|fs| match fs {
+            Ok(s) => view!{<div class="svg-container"/>}.inner_html(s.clone()),
+            _ => view!{<div/>}
+        })}
+        </Suspense>
+        <p>{move || if is_over_drop_zone.get() {
+                "over drop zone"
+            } else {
+                "not over drop zone"
+            }
+        }</p>
+        <p>"files:" {move || format!("{:?}", files.get())}</p>
+        <Suspense fallback=||view!{"No file string yet"}>
+        <ErrorBoundary fallback=move|_|view!{ "something wrong" }>
+        <p>"file string:" {move || format!("{:?}", file_string.get())}</p>
+        </ErrorBoundary>
+        </Suspense>
+        <p>"\ntodo\n" {move||token().map(|t| t.token)}</p>
     }
 }
 

@@ -2,6 +2,8 @@
 
 use leptos::html::Input;
 use leptos::*;
+use wasm_bindgen::JsValue;
+use wasm_bindgen_futures::JsFuture;
 
 /// Generic text input component.
 /// Takes the children as the label, and sets name= to every relevant thing.
@@ -85,4 +87,36 @@ pub fn Table<T: Clone + 'static, F: Fn(T) -> IV + std::clone::Clone + 'static, I
             </table>
         </Show>
     }
+}
+
+/// Only renders children when on the client side - useful for leptos_use shenanigans which don't
+/// play well with ssr.
+#[component]
+pub fn ClientOnly(#[allow(unused_variables)] children: Children) -> impl IntoView {
+    #[allow(unused_variables)]
+    let (children_view, set_children_view) = create_signal(None::<View>);
+    #[cfg(any(feature = "csr", feature = "hydrate"))]
+    request_animation_frame(move || set_children_view.set(Some(children().into_view())));
+    move || children_view.get()
+}
+
+async fn copy_to_clipboard_(to_clipboard: String) -> Result<JsValue, JsValue> {
+    let window = window(); //.expect("Should have a Window");
+    let navigator = window.navigator();
+    let clipboard = navigator
+        .clipboard()
+        .ok_or(JsValue::from_str("No clipboard found"))?;
+
+    let clipboard_promise = clipboard.write_text(&to_clipboard);
+    let _written = JsFuture::from(clipboard_promise).await?;
+    Ok(JsValue::from_str("Written to clipboard"))
+}
+
+pub fn copy_to_clipboard(to_clipboard: String) {
+    spawn_local(async move {
+        let copied = copy_to_clipboard_(to_clipboard).await;
+        if let Err(err) = copied {
+            log!("Failed to copy to clipboard: {err:?}")
+        }
+    })
 }

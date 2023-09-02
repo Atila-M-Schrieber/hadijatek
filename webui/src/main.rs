@@ -18,6 +18,8 @@ if #[cfg(feature = "ssr")] {
     use leptos_axum::{generate_route_list, LeptosRoutes, handle_server_fns_with_context};
     use leptos::{log, view, provide_context, get_configuration};
     use surrealdb::Surreal;
+    // use surrealdb::engine::remote::http::Client;
+    // use surrealdb::engine::remote::http::Http;
     use surrealdb::engine::remote::ws::Client;
     use surrealdb::engine::remote::ws::Ws;
     use surrealdb::opt::auth::Namespace;
@@ -61,7 +63,7 @@ if #[cfg(feature = "ssr")] {
     async fn main() {
         simple_logger::init_with_level(log::Level::Info).expect("couldn't initialize logging");
 
-        let db = Surreal::new::<Ws>("127.0.0.1:8080").await.expect("Cannot connect to DB");
+        let db = Surreal::new::<Ws>("127.0.0.0:8080").await.expect("Cannot connect to DB");
         db.signin(Namespace {
             namespace:"hadijatek",
             username:"hadijatek",

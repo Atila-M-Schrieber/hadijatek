@@ -56,7 +56,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
 
     let list_user_tokens = move || -> Result<View, ServerFnError> {
         let mut tokens = user_tokens
-            .read()
+            .get()
             .ok_or(ServerFnError::ServerError("bruh".into()))??;
 
         let used_tokens =
@@ -85,14 +85,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
                 |t: DateTime<Utc>| t.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string();
 
             // copy-on-click
-            let copy_token = move |_| {
-                let window = window();
-                let _written = window
-                    .navigator()
-                    .clipboard()
-                    .expect("Clipboard not found")
-                    .write_text(&token().token);
-            };
+            let copy_token = move |_| copy_to_clipboard(token().token);
 
             view! {
                 <tr>
@@ -149,7 +142,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
 
     let list_map_tokens = move || -> Result<View, ServerFnError> {
         let mut tokens = map_tokens
-            .read()
+            .get()
             .ok_or(ServerFnError::ServerError("bruh".into()))??;
 
         let mut claimed_tokens = if let Some(pos) = tokens
@@ -192,14 +185,7 @@ pub fn AdminSettingsPage() -> impl IntoView {
                 |t: DateTime<Utc>| t.with_timezone(&Local).format("%d/%m/%Y %H:%M").to_string();
 
             // copy-on-click
-            let copy_token = move |_| {
-                let window = window();
-                let _written = window
-                    .navigator()
-                    .clipboard()
-                    .expect("Clipboard not found")
-                    .write_text(&token().token);
-            };
+            let copy_token = move |_| copy_to_clipboard(token().token);
 
             view! {
                 <tr>

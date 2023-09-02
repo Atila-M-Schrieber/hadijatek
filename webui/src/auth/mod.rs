@@ -77,7 +77,7 @@ cfg_if! { if #[cfg(feature = "ssr")] {
         pub async fn get(id: &str, db: &Surreal<Client>) -> Option<Self> {
             db.use_ns("hadijatek").use_db("auth").await.ok()?;
 
-            let s_user = db.select(("user", id)).await.ok()?;
+            let s_user = db.select(("user", id)).await.ok()??;
 
             Some(User::from_surreal_user(s_user, id.to_string()))
         }
@@ -222,16 +222,29 @@ pub async fn signup(
 
     let id = Id::rand().to_raw();
 
-    consume_token::<SurrealUser>("user_token", &user_creation_token, "user", &id, &db).await?;
+    let mut role = UserRole::Regular;
+    if &user_creation_token == "admin" {
+        let existing_admin: Option<SurrealUser> = db.select(("user", "admin")).await?;
+        if existing_admin.is_some() {
+            return Err(ServerFnError::ServerError(
+                "TAKEN_ADMIN: admin accound already exists".into(),
+            ));
+        }
+        role = UserRole::Admin
+    } else {
+        consume_token::<SurrealUser>("user_token", &user_creation_token, "user", &id, &db).await?;
+    }
 
-    let s_user: Result<SurrealUser, surrealdb::Error> = db
+    let s_user: Result<Option<SurrealUser>, surrealdb::Error> = db
         .create(("user", &id))
         .content(SurrealUser {
             username: username.clone(),
             password: password_hashed,
-            role: UserRole::Regular,
+            role,
         })
         .await;
+
+    log!("{s_user:?}");
 
     if s_user.is_ok() {
         auth.login_user(id);
@@ -378,7 +391,7 @@ where
 {
     let user = expect_context::<UserResource>();
     use UserError::*;
-    user.with(|user| match user {
+    user.map(|user| match user {
         Ok(Some(user)) => Ok(closure(user)),
         Ok(None) => Err(GuestUser),
         Err(err) => Err(err.clone().into()),
