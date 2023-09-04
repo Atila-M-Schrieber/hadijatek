@@ -3,6 +3,8 @@ use leptos_router::*;
 
 use crate::lang::*;
 
+mod display;
+pub use display::*;
 mod create;
 pub use create::*;
 

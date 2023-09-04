@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-prelude = {path = "../prelude", optional = true}
+map_utils = {path = "../map_utils", default-features = false }
 axum = { version = "0.6.4", optional = true }
 axum-extra = { version = "0.7.7", features = ["cookie"], optional = true }
 console_error_panic_hook = "0.1"
@@ -84,7 +84,7 @@ ssr = [
     "leptos-use/ssr",
     "dep:tracing",
     "dep:serde_json",
-	"dep:prelude",
+	"map_utils/ssr",
 ]
 
 # Defines a size-optimized profile for the WASM bundle in release mode

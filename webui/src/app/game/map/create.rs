@@ -1,7 +1,11 @@
-use crate::app::{account::token::Token, *};
+use std::collections::HashMap;
+
+use super::display::DisplayPreMap;
+use crate::app::*;
 use js_sys::Uint8Array;
 use leptos::html::Div;
 use leptos_use::*;
+use map_utils::{Color, PreRegion};
 use web_sys::File;
 
 // put claim token in show, need current_token resource
@@ -35,9 +39,51 @@ pub fn CreateMapPage() -> impl IntoView {
 
     let have_token = move || my_map_token().is_some();
 
-    // file upload: leptos-use's use_drop_zone
-    // create server action/event? that sends svg when "upload" is pressed
-    // maybe do some pre-processing on the svg - ie. valid or not, display it first?
+    // File processing
+    let file = create_rw_signal(None);
+
+    let file_string = create_local_resource(file, |file| get_file_string(file));
+    let processed_file = create_resource(
+        move || file_string.get().and_then(Result::ok),
+        |maybefile| process_file(maybefile),
+    );
+
+    // the selected PreRegion - when not needed anymore, set to none
+    let selects = create_rw_signal(None);
+    let (selected, select) = selects.split();
+
+    create_effect(move |_| selected().map(|pr: PreRegion| log!("{}", pr.name)));
+
+    // Picking colors for water and teams by clicking
+    let lock = create_rw_signal(false); // When locked, no other colors may be selected
+    let colors = create_memo(move |_| {
+        let mut colors: HashMap<Color, usize> = HashMap::new();
+        processed_file.map(|pf| {
+            if let Ok(prs) = pf {
+                for pr in prs.iter() {
+                    colors.entry(pr.color).and_modify(|c| *c += 1).or_insert(1);
+                }
+            }
+        });
+        colors
+    });
+
+    // Water color
+    let water_color = create_rw_signal(Color::new(0, 0, 255));
+    let initial_water_color_set = create_rw_signal(false);
+    create_effect(move |_| {
+        if !initial_water_color_set.get() {
+            if let Some((most_likely_water_color, _)) = colors().iter().max_by_key(|(_, c)| **c) {
+                log!("{:?}", colors());
+                water_color.set(*most_likely_water_color);
+                initial_water_color_set.set(true);
+            }
+        }
+    });
+
+    // just for testing
+    let team1_color = create_rw_signal(Color::new(84, 44, 2));
+
     view! {
         <h1>"Welcome to the CreateMap Page!"</h1>
         <Transition fallback=||"Loading..." >
@@ -45,12 +91,76 @@ pub fn CreateMapPage() -> impl IntoView {
         <Show when=have_token fallback=move||view!{<ClaimToken claim_token=claim_token/>} >
             <Lang hu="térképkészítés" en="map creation" />
             <ClientOnly>
-                <UploadInkscapeSVG token=Signal::derive(my_map_token) />
+                <UploadInkscapeSVG file=file />
             </ClientOnly>
-            "\nother stuff..."
+            <Suspense fallback=||view!{<Lang hu="Feldolgozás..." en="Processing..."/>}>
+                {move || processed_file.map(|prs| view!{
+                    <DisplayPreMap pre_regions=prs.clone() select=select />
+                })}
+                <ClickColor color=water_color select=selects lock=lock >
+                    <Lang hu="Válaszd ki a víz színét:" en="Select the sea regions' color:" />
+                </ClickColor>
+                <ClickColor color=team1_color select=selects lock=lock >
+                    <Lang hu="Válaszd ki az egyik csapat színét:"
+                     en="Select a team's home region's color:" />
+                </ClickColor>
+            </Suspense>
         </Show>
         </ErrorBoundary>
         </Transition>
+    }
+}
+
+#[component]
+fn ClickColor(
+    color: RwSignal<Color>,
+    select: RwSignal<Option<PreRegion>>,
+    lock: RwSignal<bool>,
+    children: ChildrenFn,
+) -> impl IntoView {
+    let started = create_rw_signal(false);
+    let on_click = move |_| {
+        if !started.get() && !lock.get() {
+            select.set(None);
+            lock.set(true);
+            started.set(true); // specific to this component
+        } else if started.get() {
+            started.set(false);
+            lock.set(false);
+        }
+    };
+
+    // need to do this better w/o effect
+    create_effect(move |_| {
+        if started.get() {
+            if let Some(pr) = select.get() {
+                color.set(pr.color);
+                lock.set(false);
+                started.set(false);
+            }
+        }
+    });
+
+    let color_str = move || color.get().to_string();
+
+    view! {
+        <div class="color-picker" >
+            {children}
+            <div class="color-shower" >
+                <svg viewBox="0 0 1 1" >
+                    <rect x=0 y=0 width=1 height=1 fill=color_str >
+                        <title>{color_str}</title>
+                    </rect>
+                </svg>
+            </div>
+            <button type="button" on:click=on_click
+                class:disabled={move||lock.get() && !started.get()} >
+                <Show when=move||!started.get()
+                    fallback=||view!{<Lang hu="Mégsem" en="Cancel" />}>
+                    <Lang hu="Válassz színt" en="Select color" />
+                </Show>
+            </button>
+        </div>
     }
 }
 
@@ -76,29 +186,26 @@ async fn get_file_string(file: Option<File>) -> Result<String, String> {
 }
 
 #[server(ProcessFile, "/api")]
-async fn process_file(file_string: Option<String>) -> Result<String, ServerFnError> {
+async fn process_file(
+    file_string: Option<String>,
+) -> Result<Vec<map_utils::PreRegion>, ServerFnError> {
     if let Some(file_string) = file_string {
         if file_string.find("<script").is_some() {
             return Err(ServerFnError::ServerError("NO SCRIPT TAGS ALLOWED!".into()));
         }
-        Ok(file_string)
+        Ok(map_utils::pre_process_svg(file_string)
+            .map_err(|err| ServerFnError::ServerError(err.to_string()))?)
     } else {
         // Err(ServerFnError::ServerError("no file string".into()))
-        Ok(String::new())
+        Ok(Vec::new())
     }
 }
 
 #[component]
-fn UploadInkscapeSVG(token: Signal<Option<Token>>) -> impl IntoView {
+fn UploadInkscapeSVG(file: RwSignal<Option<File>>) -> impl IntoView {
     let drop_zone = create_node_ref::<Div>();
 
-    let (file, set_file) = create_signal(None);
-
-    let file_string = create_local_resource(file, |file| get_file_string(file));
-    let processed_file = create_resource(
-        move || file_string.get().and_then(Result::ok),
-        |maybefile| process_file(maybefile),
-    );
+    let set_file = move |file_: Option<File>| file.set(file_);
 
     let on_drop = move |event: UseDropZoneEvent| {
         let file = if !event.files.is_empty() {
@@ -111,7 +218,7 @@ fn UploadInkscapeSVG(token: Signal<Option<Token>>) -> impl IntoView {
 
     let UseDropZoneReturn {
         is_over_drop_zone,
-        files,
+        files: _,
     } = use_drop_zone_with_options(drop_zone, UseDropZoneOptions::default().on_drop(on_drop));
 
     view! {
@@ -123,26 +230,6 @@ fn UploadInkscapeSVG(token: Signal<Option<Token>>) -> impl IntoView {
             {/*<input type="file" node_ref=file_select accept=".svg" style="display:none;" />*/}
         </div>
         </div>
-
-        <Suspense fallback=||view!{"No file string yet"}>
-        {move || processed_file.map(|fs| match fs {
-            Ok(s) => view!{<div class="svg-container"/>}.inner_html(s.clone()),
-            _ => view!{<div/>}
-        })}
-        </Suspense>
-        <p>{move || if is_over_drop_zone.get() {
-                "over drop zone"
-            } else {
-                "not over drop zone"
-            }
-        }</p>
-        <p>"files:" {move || format!("{:?}", files.get())}</p>
-        <Suspense fallback=||view!{"No file string yet"}>
-        <ErrorBoundary fallback=move|_|view!{ "something wrong" }>
-        <p>"file string:" {move || format!("{:?}", file_string.get())}</p>
-        </ErrorBoundary>
-        </Suspense>
-        <p>"\ntodo\n" {move||token().map(|t| t.token)}</p>
     }
 }
 
