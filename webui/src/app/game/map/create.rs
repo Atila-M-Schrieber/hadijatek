@@ -5,7 +5,7 @@ use crate::app::*;
 use js_sys::Uint8Array;
 use leptos::html::Div;
 use leptos_use::*;
-use map_utils::{Color, PreRegion};
+use map_utils::{team::Team, Color, PreRegion};
 use web_sys::File;
 
 // put claim token in show, need current_token resource
@@ -48,6 +48,8 @@ pub fn CreateMapPage() -> impl IntoView {
         |maybefile| process_file(maybefile),
     );
 
+    let pre_regions: RwSignal<Vec<PreRegion>> = create_rw_signal(Vec::new());
+
     // the selected PreRegion - when not needed anymore, set to none
     let selects = create_rw_signal(None);
     let (selected, select) = selects.split();
@@ -56,13 +58,12 @@ pub fn CreateMapPage() -> impl IntoView {
 
     // Picking colors for water and teams by clicking
     let lock = create_rw_signal(false); // When locked, no other colors may be selected
+    provide_context(LockSignal(lock));
     let colors = create_memo(move |_| {
         let mut colors: HashMap<Color, usize> = HashMap::new();
-        processed_file.map(|pf| {
-            if let Ok(prs) = pf {
-                for pr in prs.iter() {
-                    colors.entry(pr.color).and_modify(|c| *c += 1).or_insert(1);
-                }
+        pre_regions.with(|prs| {
+            for pr in prs.iter() {
+                colors.entry(pr.color).and_modify(|c| *c += 1).or_insert(1);
             }
         });
         colors
@@ -81,8 +82,8 @@ pub fn CreateMapPage() -> impl IntoView {
         }
     });
 
-    // just for testing
-    let team1_color = create_rw_signal(Color::new(84, 44, 2));
+    // Teams
+    let teams = create_rw_signal(Vec::new());
 
     view! {
         <h1>"Welcome to the CreateMap Page!"</h1>
@@ -94,16 +95,21 @@ pub fn CreateMapPage() -> impl IntoView {
                 <UploadInkscapeSVG file=file />
             </ClientOnly>
             <Suspense fallback=||view!{<Lang hu="Feldolgozás..." en="Processing..."/>}>
-                {move || processed_file.map(|prs| view!{
-                    <DisplayPreMap pre_regions=prs.clone() select=select />
+                {move || processed_file.map(|prs| {
+                    if let Ok(prs) = prs {
+                     pre_regions.set(prs.clone());
+                    }
+                    view!{
+                        <DisplayPreMap pre_regions=prs.clone() select=select />
+                    }
                 })}
-                <ClickColor color=water_color select=selects lock=lock >
+                <div  >
+                <ClickColor color=water_color select=selects >
                     <Lang hu="Válaszd ki a víz színét:" en="Select the sea regions' color:" />
                 </ClickColor>
-                <ClickColor color=team1_color select=selects lock=lock >
-                    <Lang hu="Válaszd ki az egyik csapat színét:"
-                     en="Select a team's home region's color:" />
-                </ClickColor>
+                <AssignTeams teams=teams select=selects />
+                <p>{teams.get().iter().map(|(_, ts)| format!("{:?}", ts.get())).collect_view()}</p>
+                </div>
             </Suspense>
         </Show>
         </ErrorBoundary>
@@ -111,22 +117,126 @@ pub fn CreateMapPage() -> impl IntoView {
     }
 }
 
+#[derive(Clone)]
+struct LockSignal(RwSignal<bool>);
+
+#[component]
+fn AssignTeams(
+    teams: RwSignal<Vec<(usize, RwSignal<Option<Team>>)>>,
+    select: RwSignal<Option<PreRegion>>,
+) -> impl IntoView {
+    let team_lock = create_rw_signal(false);
+
+    let add_team = move |_| {
+        let index = teams
+            .get()
+            .iter()
+            .max_by_key(|(i, _)| i)
+            .map(|(i, _)| *i)
+            .unwrap_or_default()
+            + 1;
+        let team = create_rw_signal(None);
+
+        teams.update(|teams| teams.push((index, team)));
+    };
+
+    let delete_team = move |index| {
+        teams.update(|teams| {
+            if let Some(pos) = teams.iter().position(|(i, _)| i == &index) {
+                teams.remove(pos);
+            }
+        })
+    };
+
+    let render_team = move |(index, team): (usize, RwSignal<Option<Team>>)| {
+        // color picker
+        // find home bases based on color
+        // alert: team color on non-based region
+        let team_color = create_rw_signal(Color::black());
+
+        let (team_name, set_team_name) = create_signal(String::new());
+        let set_team_name = move |ev: Event| set_team_name(event_target_value(&ev));
+
+        // again, should solve this w/o create_effect
+        create_effect(move |_| {
+            let tc = team_color.get();
+            let tn = team_name();
+            if tc != Color::black() && !tn.is_empty() {
+                team.set(Some(Team::new(tn, tc)))
+            }
+        });
+
+        view! {
+            <div class="team-selector" >
+                <div class="team-selector-header" >
+                <Input name=format!{"team{index}"} focus_on_show=true on:input=set_team_name >
+                    <Lang hu="Csapatnév:" en="Team name:" />
+                </Input>
+                <ClickColor color=team_color select=select lock=team_lock >
+                    <Show when=move || team_color.get() == Color::black() fallback=move||view!{
+                        <Lang hu="Másik anyabázis kiválasztása" en="Select different home base"/>
+                    }>
+                        <Lang hu="Válaszd ki az egyik anyabázist:" en="Select a home base" />
+                    </Show>
+                </ClickColor>
+                <button type="button" class="delete-button" on:click=move|_|delete_team(index) >
+                    <Lang hu="Törlés" en="Delete" />
+                </button>
+                </div>
+                <div class="team-selector-footer" >
+                {/* some line about the home regions / any alerts */}
+                </div>
+            </div>
+        }
+    };
+
+    view! {
+        <div>
+            <div class="new-team" >
+            <button type="button" on:click=add_team >
+                <Lang hu="Új csapat" en="New team" />
+            </button>
+            </div>
+            <For each=teams key=|(i, _)|*i view=render_team />
+        </div>
+    }
+}
+
 #[component]
 fn ClickColor(
     color: RwSignal<Color>,
     select: RwSignal<Option<PreRegion>>,
-    lock: RwSignal<bool>,
+    #[prop(optional)] lock: Option<RwSignal<bool>>,
     children: ChildrenFn,
 ) -> impl IntoView {
+    // can specify lock if needed for outside context, or use the 'global' lock context
+    let global_lock = expect_context::<LockSignal>().0;
+    let locked = move || {
+        if let Some(lock) = lock {
+            lock.get() || global_lock.get()
+        } else {
+            global_lock.get()
+        }
+    };
+
+    let set_locks = move |b| {
+        if let Some(lock) = lock {
+            lock.set(b);
+            global_lock.set(b)
+        } else {
+            global_lock.set(b)
+        }
+    };
+
     let started = create_rw_signal(false);
     let on_click = move |_| {
-        if !started.get() && !lock.get() {
+        if !started.get() && !locked() {
             select.set(None);
-            lock.set(true);
+            set_locks(true);
             started.set(true); // specific to this component
         } else if started.get() {
             started.set(false);
-            lock.set(false);
+            set_locks(false);
         }
     };
 
@@ -135,7 +245,7 @@ fn ClickColor(
         if started.get() {
             if let Some(pr) = select.get() {
                 color.set(pr.color);
-                lock.set(false);
+                set_locks(false);
                 started.set(false);
             }
         }
@@ -154,10 +264,10 @@ fn ClickColor(
                 </svg>
             </div>
             <button type="button" on:click=on_click
-                class:disabled={move||lock.get() && !started.get()} >
+                class:disabled={move||locked() && !started.get()} >
                 <Show when=move||!started.get()
                     fallback=||view!{<Lang hu="Mégsem" en="Cancel" />}>
-                    <Lang hu="Válassz színt" en="Select color" />
+                    <Lang hu="Válassz mezőt" en="Select region" />
                 </Show>
             </button>
         </div>

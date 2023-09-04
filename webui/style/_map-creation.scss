@@ -41,6 +41,7 @@
   padding: 10px;
   margin-bottom: 20px;  // Add space between each instance
   width: fit-content;  // Makes the box only as wide as its content
+  white-space: nowrap;
   
   .color-shower {
     width: 30px;  // Width of the color preview rectangle
@@ -77,4 +78,114 @@
       }
     }
   }
+}
+
+.new-team {
+    display: flex;
+    justify-content: center; // Center the button horizontally
+    margin-top: 15px; // Provide space between the button and tables
+    margin-bottom: 20px; // Provide space between the button and tables
+
+    button {
+        padding: 10px 20px;
+        background-color: #28a745; // A distinct color for creating tokens
+        color: white;
+        border: none;
+        border-radius: 3px;
+        font-weight: bold;
+        font-family: Arial, sans-serif;
+        cursor: pointer;
+        transition: background-color 0.3s;
+
+        &:hover {
+            background-color: #218838;
+        }
+
+        &:focus {
+            outline: none;
+            box-shadow: 0 0 5px #28a745; // A subtle glow when the button is focused
+        }
+
+        &:active {
+            background-color: #1e7e34; // Darker shade for active state
+        }
+    }
+}
+
+.team-selector {
+	display: inline-block;
+	border: 1px solid #000;  // Add border
+  	border-radius: 12px;
+  	padding: 10px;
+  	margin-bottom: 20px;
+  	// width: fit-content;
+
+	.team-selector-header {
+		display: flex;
+		justify-content: space-between;
+  		align-items: center;
+
+		.input-group,
+  		.color-picker,
+  		.delete-button {
+  			flex: 1;
+  		  	margin-right: 10px;
+
+  		  	&:last-child {
+  		  	  margin-right: 0;
+  		  	}
+  		}
+
+		.color-picker {
+			margin-bottom: 0;
+		}
+
+		.input-group {
+			display: flex;
+    		align-items: center;
+    		justify-content: flex-start;
+
+    		label {
+    		    margin-right: 10px;  // Add some spacing between the label and the input
+    		}
+
+    		input {
+    		    flex: 1;  // Take up remaining space
+    		    padding: 10px;
+    		    border: 1px solid #575757;
+    		    border-radius: 3px;
+    		    background-color: #575757;
+    		    color: white;
+    		    transition: border 0.3s, background-color 0.3s;
+    		    box-sizing: border-box;
+
+    		    &:focus {
+    		        border-color: #ffcc00;
+    		        background-color: #232323;
+    		        outline: none;
+    		    }
+    		}
+		}	
+
+		.delete-button {
+			margin-left: 10px;
+			padding: 5px 10px;
+			border: none;
+			border-radius: 3px;
+			cursor: pointer;
+			background-color: #e74c3c;
+			transition: background-color 0.3s;
+			
+			&:hover {
+			    background-color: #c0392b;
+			}
+		}
+	}
+
+	.team-selector-footer {
+		clear: both;
+		display: block;
+  	  	// margin-top: 10px; // set this for internal bits, once they appear
+  	  	width: 100%;
+  	}
 }
