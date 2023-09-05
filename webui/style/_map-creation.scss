@@ -15,7 +15,8 @@
     align-items: center;
     justify-content: flex-start; // Start at the top of the div
     cursor: pointer;
-    transition: height 1s ease, width 1s ease; // Adding transition only for height and width
+    transition: height 1.5s ease, width 1.5s ease, font-size 1.5s ease,
+		border 1.5s ease, padding 1.5s ease; // Adding transition only for height and width
 
     &:hover {
         background-color: #b2b2b2; // Background color when hovered
@@ -26,8 +27,11 @@
     }
 
     &.dropped {
-        height: 50px !important; // Important to override min-height
-        width: 300px !important; // Important to override min-width
+		font-size: 0px;
+        height: 0px !important; // Important to override min-height
+        width: 0px !important; // Important to override min-width
+    	border: 0px; // Dashed border
+    	padding: 0px;
         min-height: auto; // Reset to auto
     }
 }

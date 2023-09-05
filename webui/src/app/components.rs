@@ -1,7 +1,11 @@
 //! General-use components
 
+use std::str::FromStr;
+
+use leptos::ev::Event;
 use leptos::html::Input;
 use leptos::*;
+use map_utils::Color;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 
@@ -86,6 +90,36 @@ pub fn Table<T: Clone + 'static, F: Fn(T) -> IV + std::clone::Clone + 'static, I
                 </tbody>
             </table>
         </Show>
+    }
+}
+
+/// A Color selector component, which takes children as a label,
+/// and uses a HTML color selector.
+#[component]
+pub fn ColorSelector(color: RwSignal<Color>, children: ChildrenFn) -> impl IntoView {
+    let color_str = move || color.get().to_string();
+
+    let set_color = move |ev: Event| {
+        let color_ = event_target_value(&ev);
+        if let Ok(color_) = Color::from_str(&color_) {
+            color.set(color_);
+        } else {
+            log!("{color_:?}");
+        }
+    };
+
+    view! {
+        <div class="color-picker" >
+            {children}
+            <div class="color-shower" >
+                <svg viewBox="0 0 1 1" >
+                    <rect x=0 y=0 width=1 height=1 fill=color_str >
+                        <title>{color_str}</title>
+                    </rect>
+                </svg>
+            </div>
+            <input type="color" value=color_str on:input=set_color />
+        </div>
     }
 }
 

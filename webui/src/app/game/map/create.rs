@@ -41,6 +41,8 @@ pub fn CreateMapPage() -> impl IntoView {
 
     // File processing
     let file = create_rw_signal(None);
+    // set true once the map display is done processing with its initial sorting
+    let (can_contract, set_can_contract) = create_signal(false);
 
     let file_string = create_local_resource(file, |file| get_file_string(file));
     let processed_file = create_resource(
@@ -60,24 +62,50 @@ pub fn CreateMapPage() -> impl IntoView {
     let lock = create_rw_signal(false); // When locked, no other colors may be selected
     provide_context(LockSignal(lock));
     let colors = create_memo(move |_| {
-        let mut colors: HashMap<Color, usize> = HashMap::new();
+        let mut colors: HashMap<(Color, Color), usize> = HashMap::new();
         pre_regions.with(|prs| {
             for (_, pr) in prs.node_references() {
-                colors.entry(pr.color).and_modify(|c| *c += 1).or_insert(1);
+                colors
+                    .entry((pr.stroke, pr.color))
+                    .and_modify(|c| *c += 1)
+                    .or_insert(1);
             }
         });
         colors
     });
 
-    // Water color
+    // Water color, strokes
     let water_color = create_rw_signal(Color::new(0, 0, 255));
-    let initial_water_color_set = create_rw_signal(false);
+    let water_stroke = create_rw_signal(Color::new(0, 0, 255));
+    let land_stroke = create_rw_signal(Color::new(187, 187, 187));
+    let initial_colors_set = create_rw_signal(false);
     create_effect(move |_| {
-        if !initial_water_color_set.get() {
-            if let Some((most_likely_water_color, _)) = colors().iter().max_by_key(|(_, c)| **c) {
-                log!("{:?}", colors());
+        if !initial_colors_set.get() {
+            let key = |((stroke, color), c): &((Color, Color), usize)| {
+                let (r, g, b) = color.get();
+                let (sr, sg, sb) = stroke.get();
+                // no bases, favor higher blue values, fill > stroke
+                let color_score = (stroke != &Color::black()) as isize
+                    * (b as isize + (sb / 2) as isize
+                        - (r / 2) as isize
+                        - (sr / 6) as isize
+                        - (g / 3) as isize
+                        - (sg / 9) as isize);
+                color_score * *c as isize
+            };
+            let mut colors: Vec<((Color, Color), usize)> = colors().into_iter().collect();
+            colors.sort_by_key(key);
+            let land = colors.get(0);
+            let water = colors.last();
+            if let (
+                Some(((most_likely_land_stroke, _), _)),
+                Some(((most_likely_water_stroke, most_likely_water_color), _)),
+            ) = (land, water)
+            {
                 water_color.set(*most_likely_water_color);
-                initial_water_color_set.set(true);
+                water_stroke.set(*most_likely_water_stroke);
+                land_stroke.set(*most_likely_land_stroke);
+                initial_colors_set.set(true);
             }
         }
     });
@@ -90,9 +118,9 @@ pub fn CreateMapPage() -> impl IntoView {
         <Transition fallback=||"Loading..." >
         <ErrorBoundary fallback=|_|"Encountered error" >
         <Show when=have_token fallback=move||view!{<ClaimToken claim_token=claim_token/>} >
-            <Lang hu="térképkészítés" en="map creation" />
+            <h2><Lang hu="Térkép készítés" en="Map creation" /></h2>
             <ClientOnly>
-                <UploadInkscapeSVG file=file />
+                <UploadInkscapeSVG file=file contract=can_contract />
             </ClientOnly>
             <Suspense fallback=||view!{<Lang hu="Feldolgozás..." en="Processing..."/>}>
                 {move || processed_file.map(|prs| {
@@ -100,13 +128,23 @@ pub fn CreateMapPage() -> impl IntoView {
                      pre_regions.set(prs.clone());
                     } // need some sort of error handling
                     view!{
-                        <DisplayPreMap pre_regions=prs.clone() select=select />
+                        <DisplayPreMap pre_regions=prs.clone() select=select
+                            water_color=water_color water_stroke=water_stroke
+                            land_stroke=land_stroke done=set_can_contract />
                     }
                 })}
                 <div  >
                 <ClickColor color=water_color select=selects >
-                    <Lang hu="Válaszd ki a víz színét:" en="Select the sea regions' color:" />
+                    <Lang hu="Válaszd ki a tengerek színét:" en="Select the sea regions' color:" />
                 </ClickColor>
+                <ColorSelector color=water_stroke >
+                    <Lang hu="Válaszd ki a tengeri mezők körvonalainak színét:"
+                        en="Choose the storke color of the sea regions:"/>
+                </ColorSelector>
+                <ColorSelector color=land_stroke >
+                    <Lang hu="Válaszd ki a szárazföldi mezők körvonalainak színét:"
+                        en="Choose the storke color of the land regions:"/>
+                </ColorSelector>
                 <AssignTeams teams=teams select=selects pre_regions=pre_regions />
                 <p>{teams.get().iter().map(|(_, ts)| format!("{:?}", ts.get())).collect_view()}</p>
                 </div>
@@ -247,8 +285,22 @@ fn AssignTeams(
                         }.into_view()
                     } else {
                         let bases = bases.expect("to have just checked for errors");
+                        let maybe_warn = if bases.len() != 3 {
+                            view!{
+                                <Alert header="" warning=true >
+                                    <Lang hu="Ajánlatos 3 anyabázist adni egy csapatnak"
+                                        en="You might want to provide 3 home bases to this team"/>
+                                </Alert>
+                            }
+                        } else {
+                            ().into_view()
+                        };
                         view! {
-                            <p>{list_region_names(&bases)}</p>
+                            <p>
+                                <Lang hu="Anyabázisok" en="Home bases"/>:
+                                {list_region_names(&bases)}
+                            </p>
+                            {maybe_warn}
                         }.into_view()
                     }
                 }}
@@ -380,7 +432,10 @@ async fn process_file(
 }
 
 #[component]
-fn UploadInkscapeSVG(file: RwSignal<Option<File>>) -> impl IntoView {
+fn UploadInkscapeSVG(
+    file: RwSignal<Option<File>>,
+    #[prop(into)] contract: Signal<bool>,
+) -> impl IntoView {
     let drop_zone = create_node_ref::<Div>();
 
     let set_file = move |file_: Option<File>| file.set(file_);
@@ -399,9 +454,10 @@ fn UploadInkscapeSVG(file: RwSignal<Option<File>>) -> impl IntoView {
         files: _,
     } = use_drop_zone_with_options(drop_zone, UseDropZoneOptions::default().on_drop(on_drop));
 
+    // drop zone disappears when file is input and processed
     view! {
         <div class="parent-container" >
-        <div node_ref=drop_zone class="drop-zone" class:dropped=move||file.with(|f| f.is_some())
+        <div node_ref=drop_zone class="drop-zone" class:dropped=contract
             class:active=is_over_drop_zone >
             <Lang hu="EJTSD IDE A TÉRKÉPET (jelenleg a select nem működik)"
                 en="DROP HERE (for now selecting in the menu when you click doesn't work)" />
