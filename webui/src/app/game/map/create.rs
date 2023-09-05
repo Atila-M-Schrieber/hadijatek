@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-
 use super::display::DisplayPreMap;
 use crate::app::*;
 use js_sys::Uint8Array;
 use leptos::html::Div;
 use leptos_use::*;
 use map_utils::{team::Team, Color, PreRegion};
+use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
+use std::collections::HashMap;
 use web_sys::File;
 
 // put claim token in show, need current_token resource
@@ -48,7 +48,7 @@ pub fn CreateMapPage() -> impl IntoView {
         |maybefile| process_file(maybefile),
     );
 
-    let pre_regions: RwSignal<Vec<PreRegion>> = create_rw_signal(Vec::new());
+    let pre_regions: RwSignal<Csr<PreRegion, (), Undirected>> = create_rw_signal(Csr::new());
 
     // the selected PreRegion - when not needed anymore, set to none
     let selects = create_rw_signal(None);
@@ -62,7 +62,7 @@ pub fn CreateMapPage() -> impl IntoView {
     let colors = create_memo(move |_| {
         let mut colors: HashMap<Color, usize> = HashMap::new();
         pre_regions.with(|prs| {
-            for pr in prs.iter() {
+            for (_, pr) in prs.node_references() {
                 colors.entry(pr.color).and_modify(|c| *c += 1).or_insert(1);
             }
         });
@@ -98,7 +98,7 @@ pub fn CreateMapPage() -> impl IntoView {
                 {move || processed_file.map(|prs| {
                     if let Ok(prs) = prs {
                      pre_regions.set(prs.clone());
-                    }
+                    } // need some sort of error handling
                     view!{
                         <DisplayPreMap pre_regions=prs.clone() select=select />
                     }
@@ -107,7 +107,7 @@ pub fn CreateMapPage() -> impl IntoView {
                 <ClickColor color=water_color select=selects >
                     <Lang hu="Válaszd ki a víz színét:" en="Select the sea regions' color:" />
                 </ClickColor>
-                <AssignTeams teams=teams select=selects />
+                <AssignTeams teams=teams select=selects pre_regions=pre_regions />
                 <p>{teams.get().iter().map(|(_, ts)| format!("{:?}", ts.get())).collect_view()}</p>
                 </div>
             </Suspense>
@@ -120,10 +120,18 @@ pub fn CreateMapPage() -> impl IntoView {
 #[derive(Clone)]
 struct LockSignal(RwSignal<bool>);
 
+#[derive(PartialEq, Clone, Debug)]
+enum TeamError {
+    Homeless,
+    Cringe(Vec<PreRegion>),
+    Zilch,
+}
+
 #[component]
 fn AssignTeams(
     teams: RwSignal<Vec<(usize, RwSignal<Option<Team>>)>>,
     select: RwSignal<Option<PreRegion>>,
+    pre_regions: RwSignal<Csr<PreRegion, (), Undirected>>,
 ) -> impl IntoView {
     let team_lock = create_rw_signal(false);
 
@@ -157,14 +165,51 @@ fn AssignTeams(
         let (team_name, set_team_name) = create_signal(String::new());
         let set_team_name = move |ev: Event| set_team_name(event_target_value(&ev));
 
+        use TeamError as TE;
+
+        let home_bases = create_memo(move |_| {
+            let tc = team_color.get();
+            if tc != Color::black() {
+                let home_bases: Vec<PreRegion> = pre_regions.with(|prs| {
+                    prs.node_references()
+                        .filter(|(_, pr)| pr.color == tc)
+                        .map(|(_, pr)| pr.clone())
+                        .collect()
+                });
+                if home_bases.is_empty() {
+                    return Err(TE::Homeless);
+                }
+                // cringe: the opposite of based (region without base)
+                let cringe_home_bases: Vec<PreRegion> = home_bases
+                    .iter()
+                    .filter(|pr| !pr.has_base)
+                    .cloned()
+                    .collect();
+                if !cringe_home_bases.is_empty() {
+                    return Err(TE::Cringe(cringe_home_bases));
+                }
+                Ok(home_bases)
+            } else {
+                Err(TE::Zilch)
+            }
+        });
+        let no_home_bases = move || home_bases.with(|hb| hb != &Err(TeamError::Zilch));
+
         // again, should solve this w/o create_effect
         create_effect(move |_| {
             let tc = team_color.get();
             let tn = team_name();
-            if tc != Color::black() && !tn.is_empty() {
+            if tc != Color::black() && !tn.is_empty() && home_bases().is_ok() {
                 team.set(Some(Team::new(tn, tc)))
             }
         });
+
+        let list_region_names = move |prs: &Vec<PreRegion>| {
+            prs.iter()
+                .map(|pr| pr.name.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
 
         view! {
             <div class="team-selector" >
@@ -183,9 +228,32 @@ fn AssignTeams(
                     <Lang hu="Törlés" en="Delete" />
                 </button>
                 </div>
+                <Show when=no_home_bases fallback=||()>
                 <div class="team-selector-footer" >
-                {/* some line about the home regions / any alerts */}
+                {move || {
+                    let bases = home_bases.get();
+                    if let Err(te) = home_bases.get() {
+                        let (hu, en) = match te {
+                            TE::Homeless => ("Nem tudom hogyan, de sikerült nemlétező mezőt választani".into(),
+                                "I don't know how, but you managed to select a non-existent region".into()),
+                            TE::Zilch => ("Nem kellene itt lenned! 😈🔪".into(), "You're not supposed to be here! 😈🔪".into()),
+                            TE::Cringe(regions) => (
+                                format!("Ezek a mezők a csapat kiválasztott színével rendelkeznek, de nem bázisok: {}", list_region_names(&regions)),
+                                format!("These regions have the team's chosen color, but are not bases: {}", list_region_names(&regions)),
+                            )
+                        };
+                        view!{
+                            <Alert header="" ><Lang hu=hu.clone() en=en.clone()/></Alert>
+                        }.into_view()
+                    } else {
+                        let bases = bases.expect("to have just checked for errors");
+                        view! {
+                            <p>{list_region_names(&bases)}</p>
+                        }.into_view()
+                    }
+                }}
                 </div>
+                </Show>
             </div>
         }
     };
@@ -298,7 +366,7 @@ async fn get_file_string(file: Option<File>) -> Result<String, String> {
 #[server(ProcessFile, "/api")]
 async fn process_file(
     file_string: Option<String>,
-) -> Result<Vec<map_utils::PreRegion>, ServerFnError> {
+) -> Result<Csr<map_utils::PreRegion, (), Undirected>, ServerFnError> {
     if let Some(file_string) = file_string {
         if file_string.find("<script").is_some() {
             return Err(ServerFnError::ServerError("NO SCRIPT TAGS ALLOWED!".into()));
@@ -307,7 +375,7 @@ async fn process_file(
             .map_err(|err| ServerFnError::ServerError(err.to_string()))?)
     } else {
         // Err(ServerFnError::ServerError("no file string".into()))
-        Ok(Vec::new())
+        Ok(Csr::new())
     }
 }
 
