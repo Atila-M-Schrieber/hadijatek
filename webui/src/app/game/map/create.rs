@@ -195,13 +195,9 @@ fn AssignTeams(
     };
 
     let render_team = move |(index, team): (usize, RwSignal<Option<Team>>)| {
-        // color picker
-        // find home bases based on color
-        // alert: team color on non-based region
         let team_color = create_rw_signal(Color::black());
 
         let (team_name, set_team_name) = create_signal(String::new());
-        let set_team_name = move |ev: Event| set_team_name(event_target_value(&ev));
 
         use TeamError as TE;
 
@@ -233,14 +229,22 @@ fn AssignTeams(
         });
         let no_home_bases = move || home_bases.with(|hb| hb != &Err(TeamError::Zilch));
 
-        // again, should solve this w/o create_effect
-        create_effect(move |_| {
+        let update_team = move || {
             let tc = team_color.get();
             let tn = team_name();
             if tc != Color::black() && !tn.is_empty() && home_bases().is_ok() {
                 team.set(Some(Team::new(tn, tc)))
             }
+        };
+        // due to being passed to ColorClicker, an effect is still needed for changing colors
+        create_effect(move |_| {
+            let _ = team_color.get(); // subscribe to team_color
+            update_team()
         });
+        let set_team_name = move |ev: Event| {
+            set_team_name(event_target_value(&ev));
+            update_team()
+        };
 
         let list_region_names = move |prs: &Vec<PreRegion>| {
             prs.iter()

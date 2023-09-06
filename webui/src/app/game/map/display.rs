@@ -70,10 +70,12 @@ pub fn DisplayPreMap(
         let fill_str = move || fill().to_string();
         let highlight = move |_| set_fill.update(|col| *col = col.highlight(0.15));
         let unhighlight = move |_| set_fill(pr.color);
+
         view! {
             <path on:click=move|_|select(Some(pr_clone.clone())) on:mouseenter=highlight
                 on:mouseleave=unhighlight d=pr.shape.to_data_string()
-                stroke=stroke stroke-width=stroke_width fill=fill_str >
+                stroke=stroke stroke-width=stroke_width stroke-linejoin="bevel"
+                fill=fill_str >
                 <title>{pr.name}</title>
             </path>
         }

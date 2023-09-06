@@ -59,6 +59,21 @@
     }
   }
 
+  input[type="color"] {
+    // width: auto;  // Automatic width based on content
+    padding: 1px;
+    background-color: #ffcc00;
+    border: none;
+    border-radius: 3px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+
+    &:hover {
+      background-color: #e6b300;
+    }
+  }
+
   button {
     width: auto;  // Automatic width based on content
     padding: 10px;
