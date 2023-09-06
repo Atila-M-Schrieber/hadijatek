@@ -162,12 +162,13 @@ struct LockSignal(RwSignal<bool>);
 enum TeamError {
     Homeless,
     Cringe(Vec<PreRegion>),
+    NonyoTeam(String),
     Zilch,
 }
 
 #[component]
 fn AssignTeams(
-    teams: RwSignal<Vec<(usize, RwSignal<Option<Team>>)>>,
+    teams: RwSignal<Vec<(usize, RwSignal<Option<(Team, Vec<PreRegion>)>>)>>,
     select: RwSignal<Option<PreRegion>>,
     pre_regions: RwSignal<Csr<PreRegion, (), Undirected>>,
 ) -> impl IntoView {
@@ -194,7 +195,7 @@ fn AssignTeams(
         })
     };
 
-    let render_team = move |(index, team): (usize, RwSignal<Option<Team>>)| {
+    let render_team = move |(index, team): (usize, RwSignal<Option<(Team, Vec<PreRegion>)>>)| {
         let team_color = create_rw_signal(Color::black());
 
         let (team_name, set_team_name) = create_signal(String::new());
@@ -204,6 +205,16 @@ fn AssignTeams(
         let home_bases = create_memo(move |_| {
             let tc = team_color.get();
             if tc != Color::black() {
+                let team_with_same_color = teams().into_iter().find(|(i, team_sig)| {
+                    i != &index
+                        && team_sig
+                            .with(|t| t.clone().map_or(false, |(t, _)| t.color() == team_color()))
+                });
+                if let Some((_, team_sig)) = team_with_same_color {
+                    return Err(TE::NonyoTeam(
+                        team_sig().map_or("".into(), |(t, _)| t.name().to_owned()),
+                    ));
+                }
                 let home_bases: Vec<PreRegion> = pre_regions.with(|prs| {
                     prs.node_references()
                         .filter(|(_, pr)| pr.color == tc)
@@ -232,9 +243,11 @@ fn AssignTeams(
         let update_team = move || {
             let tc = team_color.get();
             let tn = team_name();
-            if tc != Color::black() && !tn.is_empty() && home_bases().is_ok() {
-                team.set(Some(Team::new(tn, tc)))
-            }
+            let _ = home_bases().map(|home_bases| {
+                if tc != Color::black() && !tn.is_empty() {
+                    team.set(Some((Team::new(tn, tc), home_bases)))
+                }
+            });
         };
         // due to being passed to ColorClicker, an effect is still needed for changing colors
         create_effect(move |_| {
@@ -282,7 +295,11 @@ fn AssignTeams(
                             TE::Cringe(regions) => (
                                 format!("Ezek a mezők a csapat kiválasztott színével rendelkeznek, de nem bázisok: {}", list_region_names(&regions)),
                                 format!("These regions have the team's chosen color, but are not bases: {}", list_region_names(&regions)),
-                            )
+                            ),
+                            TE::NonyoTeam(team) => {
+                                (format!("Ez a csapat már létezik! (Csapatnév: {})", team),
+                                format!("This team already exists! (Team name: {})", team))
+                            }
                         };
                         view!{
                             <Alert header="" ><Lang hu=hu.clone() en=en.clone()/></Alert>
