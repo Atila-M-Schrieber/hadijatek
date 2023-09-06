@@ -1,10 +1,11 @@
 use std::{cmp::Ordering, collections::HashSet};
 
+use leptos::ev::Event;
 use leptos::*;
 use map_utils::{Color, Point, PreRegion};
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 
-// use crate::lang::*;
+use crate::lang::*;
 
 #[component]
 pub fn DisplayPreMap(
@@ -54,7 +55,7 @@ pub fn DisplayPreMap(
     });
 
     // TODO: optimize all the cloning (probably not a huge deal)
-    let show_region = move |(_, pr): (_, PreRegion)| {
+    let view_region = move |(_, pr): (_, PreRegion)| {
         let stroke_info = move || {
             if pr.color == water_color.get() {
                 (water_stroke.get().to_string(), 2)
@@ -73,9 +74,6 @@ pub fn DisplayPreMap(
         let highlight = move |_| set_fill.update(|col| *col = col.highlight(0.15));
         let unhighlight = move |_| set_fill(pr.color);
 
-        let (cx, cy) = pr.pole.into();
-        log!("({cx}, {cy})");
-
         view! {
             <path on:click=move|_|select(Some(pr_clone.clone())) on:mouseenter=highlight
                 on:mouseleave=unhighlight d=pr.shape.to_data_string()
@@ -83,12 +81,26 @@ pub fn DisplayPreMap(
                 fill=fill_str >
                 <title>{pr.name}</title>
             </path>
-            <circle cx=cx cy=cy r="5" stroke="black" stroke-width="1" fill="black" />
         }
     };
 
+    let view_regions = move || {
+        let view = pre_regions_vec()
+            .into_iter()
+            .map(view_region)
+            .collect_view();
+        done(true);
+        view
+    };
+
+    // toggle borders
+    let (checked, set_checked) = create_signal(true);
+    let check = move |_ev: Event| {
+        set_checked.update(|b| *b = !*b);
+    };
+
     // Border between two regions, colored to reflect the type of border
-    let show_border = move |pr1: &PreRegion, pr2: &PreRegion| {
+    let view_border = move |pr1: &PreRegion, pr2: &PreRegion| {
         let (x1, y1) = pr1.pole.into();
         let (x2, y2) = pr2.pole.into();
         let color1 = pr1.color;
@@ -97,17 +109,36 @@ pub fn DisplayPreMap(
         let wc = water_color();
 
         let sea = color1 == wc || color2 == wc;
-        let border_color = if sea { (0, 0, 255) } else { (112, 72, 60) };
-        let border_color = Color::from(border_color).to_string();
+        let border_color = if sea { water_stroke() } else { land_stroke() };
+        let border_color = border_color.to_string();
 
         view! {
-            <line x1=x1 y1=y1 x2=x2 y2=y2 stroke="black" stroke-width="3" />
+            <line x1=x1 y1=y1 x2=x2 y2=y2 stroke="black" stroke-width="3"/>
             <line x1=x1 y1=y1 x2=x2 y2=y2
-                stroke=border_color stroke-width="1" stroke-linecap="round" />
+                stroke=border_color stroke-width="1"/>
         }
     };
 
-    let show_borders = move || {
+    let prev_colors = create_rw_signal((Color::black(), Color::black()));
+    // This is an infinite loop, should fix, would be nice
+    let need_new_borders = create_memo(move |prev| {
+        let prevs = prev_colors();
+        let currents = (water_stroke(), land_stroke());
+        prev_colors.set(currents);
+        if prev.is_none() {
+            true
+        } else {
+            currents != prevs
+        }
+    });
+
+    // create_effect(move |_| log!("{}", need_new_borders()));
+
+    let view_borders = move || {
+        //if !need_new_borders() {
+        //    return ().into_view();
+        //}
+
         let mut views = Vec::new();
 
         let mut visited = HashSet::new();
@@ -117,25 +148,56 @@ pub fn DisplayPreMap(
                 let pair = if i < j { (i, j) } else { (j, i) };
                 if !visited.contains(&pair) {
                     visited.insert(pair);
-                    views.push(show_border(pr, &pre_regions[j]))
+                    views.push(view_border(pr, &pre_regions[j]))
                 }
             }
         }
 
-        views
+        views.into_view()
+    };
+    let view_borders = store_value(view_borders); // damnit why
+
+    let cover_lines = move |(_, pr): (_, PreRegion)| {
+        let (cx, cy) = pr.pole.into();
+
+        let color = if pr.color == water_color() {
+            water_stroke()
+        } else {
+            land_stroke()
+        }
+        .to_string();
+
+        view! {
+            <circle cx=cx cy=cy r="1.5" fill=color />
+        }
+    };
+
+    let cover_all_lines = move || {
+        pre_regions_vec()
+            .into_iter()
+            .map(cover_lines)
+            .collect_view()
     };
 
     view! {
+        <div class="map-container" >
         <div class="svg-container" >
             <svg viewBox=format!("0 0 {} {}", extent.0, extent.1) >
-                {move || {
-                    let view = pre_regions_vec().into_iter().map(show_region).collect_view();
-                    done(true);
-                    view
-                }}
-                {show_borders}
+                {view_regions}
+                <Show when=checked fallback=||() >
+                {view_borders.get_value()}
+                {cover_all_lines}
+                </Show>
                 <rect x=0 y=0 width=extent.0 height=extent.1 stroke="black" fill="none" />
             </svg>
+        </div>
+        <div class="checkbox-group">
+            <input type="checkbox" id="borders" name="borders" on:input=check checked/>
+            <label for="borders" ><Show when=checked fallback=||view!{
+                <Lang hu="Határok mutatása" en="Show borders"/>}>
+                <Lang hu="Határok elrejtése" en="Hide borders"/>
+            </Show></label>
+        </div>
         </div>
     }
     .into_view()
