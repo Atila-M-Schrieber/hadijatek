@@ -50,27 +50,47 @@ pub fn CreateMapPage() -> impl IntoView {
         |maybefile| process_file(maybefile),
     );
 
-    let pre_regions: RwSignal<Csr<PreRegion, (), Undirected>> = create_rw_signal(Csr::new());
+    let file_done = move || processed_file.with(|p| p.as_ref().map(|_| true)) == Some(true);
+    let file_is_processed = move || processed_file.and_then(|_| true) == Some(Ok(true));
+    let file_err = move || {
+        processed_file.with(|e| {
+            e.as_ref().and_then(|e| {
+                if let Err(e) = e {
+                    Some(e.clone())
+                } else {
+                    None
+                }
+            })
+        })
+    };
+
+    let pre_regions: Signal<Csr<PreRegion, (), Undirected>> = Signal::derive(move || {
+        if file_is_processed() {
+            processed_file.with(|p| p.clone().unwrap().unwrap())
+        } else {
+            Csr::new()
+        }
+    });
 
     // the selected PreRegion - when not needed anymore, set to none
     let selects = create_rw_signal(None);
     let (selected, select) = selects.split();
 
-    create_effect(move |_| selected().map(|pr: PreRegion| log!("{}", pr.name)));
+    // create_effect(move |_| selected().map(|pr: PreRegion| log!("{}", pr.name)));
 
     // Picking colors for water and teams by clicking
     let lock = create_rw_signal(false); // When locked, no other colors may be selected
     provide_context(LockSignal(lock));
     let colors = create_memo(move |_| {
         let mut colors: HashMap<(Color, Color), usize> = HashMap::new();
-        pre_regions.with(|prs| {
-            for (_, pr) in prs.node_references() {
+        if file_is_processed() {
+            for (_, pr) in pre_regions().node_references() {
                 colors
                     .entry((pr.stroke, pr.color))
                     .and_modify(|c| *c += 1)
                     .or_insert(1);
             }
-        });
+        };
         colors
     });
 
@@ -122,17 +142,16 @@ pub fn CreateMapPage() -> impl IntoView {
             <ClientOnly>
                 <UploadInkscapeSVG file=file contract=can_contract />
             </ClientOnly>
-            <Suspense fallback=||view!{<Lang hu="Feldolgozás..." en="Processing..."/>}>
-                {move || processed_file.map(|prs| {
-                    if let Ok(prs) = prs {
-                     pre_regions.set(prs.clone());
-                    } // need some sort of error handling
-                    view!{
-                        <DisplayPreMap pre_regions=prs.clone() select=select
-                            water_color=water_color water_stroke=water_stroke
-                            land_stroke=land_stroke done=set_can_contract />
-                    }
-                })}
+            <Show when=move||file_err().is_some() fallback=||() >
+                <Alert header="ERROR" >
+                    <Lang hu="Hiba történt:" en="Error: " />
+                    {file_err().map(|e| format!("{e}"))}
+                </Alert>
+            </Show>
+            <Show when=file_is_processed fallback=||view!{<Lang hu="Feldolgozás..." en="Processing..."/>}>
+                <DisplayPreMap pre_regions=pre_regions select=select
+                    water_color=water_color water_stroke=water_stroke
+                    land_stroke=land_stroke done=set_can_contract />
                 <div  >
                 <ClickColor color=water_color select=selects >
                     <Lang hu="Válaszd ki a tengerek színét:" en="Select the sea regions' color:" />
@@ -148,7 +167,7 @@ pub fn CreateMapPage() -> impl IntoView {
                 <AssignTeams teams=teams select=selects pre_regions=pre_regions />
                 <p>{teams.get().iter().map(|(_, ts)| format!("{:?}", ts.get())).collect_view()}</p>
                 </div>
-            </Suspense>
+            </Show>
         </Show>
         </ErrorBoundary>
         </Transition>
@@ -170,7 +189,7 @@ enum TeamError {
 fn AssignTeams(
     teams: RwSignal<Vec<(usize, RwSignal<Option<(Team, Vec<PreRegion>)>>)>>,
     select: RwSignal<Option<PreRegion>>,
-    pre_regions: RwSignal<Csr<PreRegion, (), Undirected>>,
+    pre_regions: Signal<Csr<PreRegion, (), Undirected>>,
 ) -> impl IntoView {
     let team_lock = create_rw_signal(false);
 
@@ -439,7 +458,7 @@ async fn get_file_string(file: Option<File>) -> Result<String, String> {
 #[server(ProcessFile, "/api")]
 async fn process_file(
     file_string: Option<String>,
-) -> Result<Csr<map_utils::PreRegion, (), Undirected>, ServerFnError> {
+) -> Result<Csr<PreRegion, (), Undirected>, ServerFnError> {
     if let Some(file_string) = file_string {
         if file_string.find("<script").is_some() {
             return Err(ServerFnError::ServerError("NO SCRIPT TAGS ALLOWED!".into()));
@@ -447,8 +466,8 @@ async fn process_file(
         Ok(map_utils::pre_process_svg(file_string)
             .map_err(|err| ServerFnError::ServerError(err.to_string()))?)
     } else {
-        // Err(ServerFnError::ServerError("no file string".into()))
-        Ok(Csr::new())
+        Err(ServerFnError::ServerError("no file string".into()))
+        // Ok(Csr::new())
     }
 }
 

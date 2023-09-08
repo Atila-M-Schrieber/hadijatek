@@ -39,6 +39,7 @@ eyre = { version = "0.6.8", optional = true }
 anyhow = "1.0.66"
 chrono = { version = "0.4.26", features = ["serde"]}
 wasm-bindgen-futures = "0.4"
+#wasm-bindgen-rayon = "1.0.3"
 js-sys = "0.3.64"
 petgraph = { path = "../../petgraph", default-features = false, features = ["serde-1"] }
 
