@@ -4,7 +4,7 @@
 
 use std::{error::Error, fmt::Display};
 
-use eyre::Result;
+use anyhow::Result;
 use Language::*;
 
 /// List of supported languages

@@ -1,9 +1,8 @@
 [workspace]
 resolver = "2"
-
 members = [
 	"prelude",
-	"create_map",
+	"map_utils",
 	"webui",
 	"adjudicator",
 ]

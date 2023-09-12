@@ -1,8 +1,8 @@
 //! 2D f32 tuple point.
 
-use std::fmt::Display;
-
+use geo::Coord;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use svg::node::element::path::Parameters;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -39,6 +39,21 @@ impl Point {
 impl From<Point> for (f32, f32) {
     fn from(point: Point) -> (f32, f32) {
         (point.0, point.1)
+    }
+}
+
+impl From<Point> for Coord {
+    fn from(point: Point) -> Self {
+        Coord {
+            x: point.0 as f64,
+            y: point.1 as f64,
+        }
+    }
+}
+
+impl From<Coord> for Point {
+    fn from(coord: Coord) -> Self {
+        Point::new(coord.x as f32, coord.y as f32)
     }
 }
 

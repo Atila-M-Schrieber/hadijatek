@@ -11,6 +11,7 @@ if #[cfg(feature = "ssr")] {
         body::Body as AxumBody,
         Router,
     };
+    // use leptos::ServerFn;
     use webui::app::*;
     use webui::auth::*;
     use webui::AppState;
@@ -90,6 +91,9 @@ if #[cfg(feature = "ssr")] {
             leptos_options,
             db: db.clone(),
         };
+
+        // For some weird reason:
+        // let _ = ProcessFile::register_explicit();
 
         // build our application with a route
         let app = Router::new()

@@ -1,12 +1,10 @@
 use super::display::DisplayPreMap;
 use crate::app::*;
 use js_sys::Uint8Array;
-use leptos::html::Div;
-use leptos_use::*;
-use map_utils::{team::Team, Color, PreRegion};
+use map_utils::{Color, Goodness, PreProcessed, PreRegion};
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use std::collections::HashMap;
-use web_sys::File;
+use web_sys::{File, SubmitEvent};
 
 // put claim token in show, need current_token resource
 #[component]
@@ -39,19 +37,17 @@ pub fn CreateMapPage() -> impl IntoView {
 
     let have_token = move || my_map_token().is_some();
 
-    // File processing
-    let file = create_rw_signal(None);
     // set true once the map display is done processing with its initial sorting
     let (can_contract, set_can_contract) = create_signal(false);
 
-    let file_string = create_local_resource(file, |file| get_file_string(file));
-    let processed_file = create_resource(
-        move || file_string.get().and_then(Result::ok),
-        |maybefile| process_file(maybefile),
-    );
+    let file_upload = create_server_action::<ProcessFile>();
+    // let processed_file = create_resource(move || file_upload.value(), |processed| processed);
+    let processed_file = file_upload.value();
 
-    let file_done = move || processed_file.with(|p| p.as_ref().map(|_| true)) == Some(true);
-    let file_is_processed = move || processed_file.and_then(|_| true) == Some(Ok(true));
+    //let file_done = move || processed_file.with(|p| p.as_ref().map(|_| true)) == Some(true);
+    let file_is_processed =
+        create_memo(move |_| processed_file.with(|res| res.as_ref().map(|_| true)) == Some(true));
+    // let file_err = move || None::<String>;
     let file_err = move || {
         processed_file.with(|e| {
             e.as_ref().and_then(|e| {
@@ -65,16 +61,23 @@ pub fn CreateMapPage() -> impl IntoView {
     };
 
     let pre_regions: Signal<Csr<PreRegion, (), Undirected>> = Signal::derive(move || {
-        if file_is_processed() {
-            processed_file.with(|p| p.clone().unwrap().unwrap())
+        if file_is_processed.get_untracked() {
+            processed_file().clone().unwrap().unwrap().0
         } else {
             Csr::new()
+        }
+    });
+    let goodnesses: Signal<HashMap<u32, Goodness>> = Signal::derive(move || {
+        if file_is_processed.get_untracked() {
+            processed_file().clone().unwrap().unwrap().1
+        } else {
+            HashMap::new()
         }
     });
 
     // the selected PreRegion - when not needed anymore, set to none
     let selects = create_rw_signal(None);
-    let (selected, select) = selects.split();
+    let (_selected, select) = selects.split();
 
     // create_effect(move |_| selected().map(|pr: PreRegion| log!("{}", pr.name)));
 
@@ -137,19 +140,20 @@ pub fn CreateMapPage() -> impl IntoView {
         <h1>"Welcome to the CreateMap Page!"</h1>
         <Transition fallback=||"Loading..." >
         <ErrorBoundary fallback=|_|"Encountered error" >
-        <Show when=have_token fallback=move||view!{<ClaimToken claim_token=claim_token/>} >
+        <Show when=have_token fallback=move||view!{
+                <ClaimToken claim_token=claim_token/>
+        }>
             <h2><Lang hu="Térkép készítés" en="Map creation" /></h2>
-            <ClientOnly>
-                <UploadInkscapeSVG file=file contract=can_contract />
-            </ClientOnly>
+            <UploadInkscapeSVG file=file_upload contract=can_contract />
             <Show when=move||file_err().is_some() fallback=||() >
                 <Alert header="ERROR" >
                     <Lang hu="Hiba történt:" en="Error: " />
                     {file_err().map(|e| format!("{e}"))}
                 </Alert>
             </Show>
-            <Show when=file_is_processed fallback=||view!{<Lang hu="Feldolgozás..." en="Processing..."/>}>
-                <DisplayPreMap pre_regions=pre_regions select=select
+            <Show when=file_is_processed
+                fallback=||()>
+                <DisplayPreMap pre_regions=pre_regions goodnesses=goodnesses select=select
                     water_color=water_color water_stroke=water_stroke
                     land_stroke=land_stroke done=set_can_contract />
                 <div  >
@@ -165,7 +169,6 @@ pub fn CreateMapPage() -> impl IntoView {
                         en="Choose the storke color of the land regions:"/>
                 </ColorSelector>
                 <AssignTeams teams=teams select=selects pre_regions=pre_regions />
-                <p>{teams.get().iter().map(|(_, ts)| format!("{:?}", ts.get())).collect_view()}</p>
                 </div>
             </Show>
         </Show>
@@ -185,9 +188,11 @@ enum TeamError {
     Zilch,
 }
 
+type TeamInfo = (usize, RwSignal<Color>, RwSignal<String>);
+
 #[component]
 fn AssignTeams(
-    teams: RwSignal<Vec<(usize, RwSignal<Option<(Team, Vec<PreRegion>)>>)>>,
+    teams: RwSignal<Vec<TeamInfo>>,
     select: RwSignal<Option<PreRegion>>,
     pre_regions: Signal<Csr<PreRegion, (), Undirected>>,
 ) -> impl IntoView {
@@ -197,42 +202,44 @@ fn AssignTeams(
         let index = teams
             .get()
             .iter()
-            .max_by_key(|(i, _)| i)
-            .map(|(i, _)| *i)
+            .max_by_key(|(i, _, _)| i)
+            .map(|(i, _, _)| *i)
             .unwrap_or_default()
             + 1;
-        let team = create_rw_signal(None);
 
-        teams.update(|teams| teams.push((index, team)));
+        let color = create_rw_signal(Color::black());
+
+        let name = create_rw_signal(String::new());
+
+        teams.update(|teams| teams.push((index, color, name)));
     };
 
     let delete_team = move |index| {
         teams.update(|teams| {
-            if let Some(pos) = teams.iter().position(|(i, _)| i == &index) {
+            if let Some(pos) = teams.iter().position(|(i, _, _)| i == &index) {
                 teams.remove(pos);
             }
         })
     };
 
-    let render_team = move |(index, team): (usize, RwSignal<Option<(Team, Vec<PreRegion>)>>)| {
-        let team_color = create_rw_signal(Color::black());
-
-        let (team_name, set_team_name) = create_signal(String::new());
-
+    let render_team = move |(index, team_color, team_name): TeamInfo| {
         use TeamError as TE;
 
         let home_bases = create_memo(move |_| {
-            let tc = team_color.get();
+            let tn = team_name();
+            let team_with_same_name = teams()
+                .into_iter()
+                .find(|(i, _, t_n)| i != &index && t_n() == tn && !tn.is_empty());
+            if let Some((_, _, t_n)) = team_with_same_name {
+                return Err(TE::NonyoTeam(t_n()));
+            }
+            let tc = team_color();
             if tc != Color::black() {
-                let team_with_same_color = teams().into_iter().find(|(i, team_sig)| {
-                    i != &index
-                        && team_sig
-                            .with(|t| t.clone().map_or(false, |(t, _)| t.color() == team_color()))
-                });
-                if let Some((_, team_sig)) = team_with_same_color {
-                    return Err(TE::NonyoTeam(
-                        team_sig().map_or("".into(), |(t, _)| t.name().to_owned()),
-                    ));
+                let team_with_same_color = teams()
+                    .into_iter()
+                    .find(|(i, t_c, _)| i != &index && t_c() == tc);
+                if let Some((_, _, t_n)) = team_with_same_color {
+                    return Err(TE::NonyoTeam(t_n()));
                 }
                 let home_bases: Vec<PreRegion> = pre_regions.with(|prs| {
                     prs.node_references()
@@ -259,23 +266,10 @@ fn AssignTeams(
         });
         let no_home_bases = move || home_bases.with(|hb| hb != &Err(TeamError::Zilch));
 
-        let update_team = move || {
-            let tc = team_color.get();
-            let tn = team_name();
-            let _ = home_bases().map(|home_bases| {
-                if tc != Color::black() && !tn.is_empty() {
-                    team.set(Some((Team::new(tn, tc), home_bases)))
-                }
-            });
-        };
-        // due to being passed to ColorClicker, an effect is still needed for changing colors
-        create_effect(move |_| {
-            let _ = team_color.get(); // subscribe to team_color
-            update_team()
-        });
+        // let no_home_bases = || false;
+
         let set_team_name = move |ev: Event| {
-            set_team_name(event_target_value(&ev));
-            update_team()
+            team_name.set(event_target_value(&ev));
         };
 
         let list_region_names = move |prs: &Vec<PreRegion>| {
@@ -316,8 +310,13 @@ fn AssignTeams(
                                 format!("These regions have the team's chosen color, but are not bases: {}", list_region_names(&regions)),
                             ),
                             TE::NonyoTeam(team) => {
-                                (format!("Ez a csapat már létezik! (Csapatnév: {})", team),
-                                format!("This team already exists! (Team name: {})", team))
+                                let (hu, en) = if team.is_empty() {
+                                    ("ISMERETLEN", "UNKNOWN")
+                                } else { (team.as_str(), team.as_str()) };
+                                (
+                                    format!("Ez a csapat már létezik! (Csapatnév: {})", hu),
+                                    format!("This team already exists! (Team name: {})", en)
+                                )
                             }
                         };
                         view!{
@@ -357,7 +356,7 @@ fn AssignTeams(
                 <Lang hu="Új csapat" en="New team" />
             </button>
             </div>
-            <For each=teams key=|(i, _)|*i view=render_team />
+            <For each=teams key=|(i, _, _)|*i view=render_team />
         </div>
     }
 }
@@ -452,57 +451,91 @@ async fn get_file_string(file: Option<File>) -> Result<String, String> {
     let data: Vec<u8> = arr.to_vec();
 
     // the errror should eventually be an alert
-    String::from_utf8(data).map_err(|err| format!("{err}"))
+    let string = String::from_utf8(data).map_err(|err| format!("{err}"))?;
+
+    if string.find("<script").is_some() {
+        return Err("NO SCRIPT TAGS ALLOWED!".into());
+    }
+
+    Ok(string)
 }
 
 #[server(ProcessFile, "/api")]
-async fn process_file(
-    file_string: Option<String>,
-) -> Result<Csr<PreRegion, (), Undirected>, ServerFnError> {
-    if let Some(file_string) = file_string {
-        if file_string.find("<script").is_some() {
-            return Err(ServerFnError::ServerError("NO SCRIPT TAGS ALLOWED!".into()));
-        }
-        Ok(map_utils::pre_process_svg(file_string)
-            .map_err(|err| ServerFnError::ServerError(err.to_string()))?)
-    } else {
-        Err(ServerFnError::ServerError("no file string".into()))
-        // Ok(Csr::new())
-    }
+pub async fn process_file(file: String) -> Result<PreProcessed, ServerFnError> {
+    Ok(map_utils::pre_process_svg(file)
+        .map_err(|err| ServerFnError::ServerError(err.to_string()))?)
 }
 
 #[component]
 fn UploadInkscapeSVG(
-    file: RwSignal<Option<File>>,
+    file: Action<ProcessFile, Result<PreProcessed, ServerFnError>>,
     #[prop(into)] contract: Signal<bool>,
 ) -> impl IntoView {
-    let drop_zone = create_node_ref::<Div>();
+    let file_picker: NodeRef<leptos::html::Input> = create_node_ref();
 
-    let set_file = move |file_: Option<File>| file.set(file_);
+    let (file_err, set_file_err) = create_signal(None);
+    let (submitted, set_submitted) = create_signal(false);
 
-    let on_drop = move |event: UseDropZoneEvent| {
-        let file = if !event.files.is_empty() {
-            Some(event.files[0].clone())
-        } else {
-            None
-        };
-        set_file(file);
+    let file_string = create_action(move |_| async move {
+        let file = file_picker
+            .get_untracked()
+            .and_then(|fs| fs.files().and_then(|fs| fs.item(0)));
+        get_file_string(file).await
+    });
+
+    let get_fs = move |_| {
+        set_file_err(None);
+        file_string.dispatch(())
     };
 
-    let UseDropZoneReturn {
-        is_over_drop_zone,
-        files: _,
-    } = use_drop_zone_with_options(drop_zone, UseDropZoneOptions::default().on_drop(on_drop));
+    let upload = move |ev: SubmitEvent| {
+        if submitted() {
+            return ();
+        } else {
+            ev.prevent_default();
+        }
 
-    // drop zone disappears when file is input and processed
+        let file_string = file_string.value().get_untracked();
+        if let Some(Ok(file_string)) = file_string {
+            set_file_err(None);
+            set_submitted(true);
+            file.dispatch(ProcessFile { file: file_string });
+        } else if let Some(Err(err)) = file_string {
+            set_file_err(Some(err));
+        }
+    };
+
+    let (hover, set_hover) = create_signal(false);
+    let set_hover = move |_| set_hover.update(|h| *h = !*h);
+
+    let disabled = move || file_string.value().with(|v| v.is_none());
+
     view! {
-        <div class="parent-container" >
-        <div node_ref=drop_zone class="drop-zone" class:dropped=contract
-            class:active=is_over_drop_zone >
-            <Lang hu="EJTSD IDE A TÉRKÉPET (jelenleg a select nem működik)"
-                en="DROP HERE (for now selecting in the menu when you click doesn't work)" />
-            {/*<input type="file" node_ref=file_select accept=".svg" style="display:none;" />*/}
-        </div>
+        <div class="upload-container" >
+            <form on:submit=upload >
+                <div class="file-upload-wrapper" class:dropped=contract
+                    on:mouseenter=set_hover on:mouseleave=set_hover >
+                    <input _ref=file_picker on:input=get_fs type="file" name="file" id="file"
+                        accept=".svg" />
+                    <label for="file" class:hovered=hover class:dropped=contract >
+                        <Show when=disabled fallback=||view!{
+                            <Lang hu="Térkép kiválasztva" en="Map selected"/>
+                        }>
+                            <Lang hu="EJTSD IDE A TÉRKÉPET" en="DROP MAP HERE" />
+                        </Show>
+                    </label>
+                </div>
+                <Show when=move||file_err().is_some() fallback=||()>
+                    <Alert header="ERROR" >
+                        <Lang hu="Hiba: " en="Error: " />{file_err()}
+                    </Alert>
+                </Show>
+                <Submit disable=disabled >
+                    <Show when=submitted fallback=||view!{<Lang hu="Feltöltés" en="Upload" />}>
+                        <Lang hu="Újrakezdés" en="Restart" />
+                    </Show>
+                </Submit>
+            </form>
         </div>
     }
 }

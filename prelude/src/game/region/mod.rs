@@ -29,7 +29,7 @@ use std::{
 };
 
 use super::team::Team;
-use crate::draw::{Color, Shape};
+use crate::draw::{Color, Point, Shape};
 use errors::RegionCreationError;
 use serde::{Deserialize, Serialize};
 
@@ -80,6 +80,7 @@ pub struct Region {
     region_type: RegionType,
     base: Option<RefCell<Base>>,
     shape: Shape,
+    pole: Point,
     color: Color,
 }
 
@@ -89,6 +90,7 @@ impl Region {
         region_type: RegionType,
         base: Option<RefCell<Base>>,
         shape: Shape,
+        pole: Point,
         color: Color,
     ) -> Result<Self, RegionCreationError> {
         use RegionCreationError::*;
@@ -101,6 +103,7 @@ impl Region {
             region_type,
             base,
             shape,
+            pole,
             color,
         })
     }
@@ -129,6 +132,10 @@ impl Region {
 
     pub fn shape(&self) -> &Shape {
         &self.shape
+    }
+
+    pub fn pole(&self) -> Point {
+        self.pole
     }
 
     pub fn color(&self) -> Color {

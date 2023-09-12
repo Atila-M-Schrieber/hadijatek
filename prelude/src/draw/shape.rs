@@ -1,5 +1,8 @@
 //! Vec of Points, with many helper methods and trait implementations
 
+use anyhow::Result;
+use geo::{LineString, Polygon};
+use polylabel::polylabel;
 use serde::{Deserialize, Serialize};
 use std::{
     error,
@@ -19,6 +22,31 @@ impl Shape {
 
     pub fn new(points: &[Point]) -> Self {
         Shape(points.to_owned())
+    }
+
+    // needs optimization for size, fine for speed
+    pub fn to_data_string(self) -> String {
+        self.0
+            .into_iter()
+            .enumerate()
+            .map(|(n, p)| {
+                let (x, y) = p.get();
+                let c = match n {
+                    0 => "M",
+                    1 => "L",
+                    _ => "",
+                };
+                format!("{c} {x},{y}")
+            })
+            .collect::<Vec<String>>()
+            .join(" ")
+            + " Z"
+    }
+
+    pub fn pole(&self) -> Result<Point> {
+        let poly: Polygon = self.clone().into();
+        let point: geo::Coord = polylabel(&poly, &0.01)?.into();
+        Ok(point.into())
     }
 }
 
@@ -167,6 +195,21 @@ impl TryFrom<Data> for Shape {
 impl From<Shape> for Vec<Point> {
     fn from(shape: Shape) -> Vec<Point> {
         shape.0
+    }
+}
+
+impl From<Shape> for LineString {
+    fn from(shape: Shape) -> Self {
+        let mut points = shape.0;
+        let first = points[0];
+        points.push(first);
+        points.into()
+    }
+}
+
+impl From<Shape> for Polygon {
+    fn from(shape: Shape) -> Self {
+        Polygon::new(shape.into(), Vec::new())
     }
 }
 

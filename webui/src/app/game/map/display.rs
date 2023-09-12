@@ -1,21 +1,18 @@
 use leptos::ev::Event;
 use leptos::*;
-use map_utils::{Color, Point, PreRegion};
+use map_utils::{Color, Goodness, Point, PreRegion};
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    f32::consts::{PI, TAU},
 };
 
 use crate::lang::*;
 
-mod goodness;
-use goodness::*;
-
 #[component]
 pub fn DisplayPreMap(
     pre_regions: Signal<Csr<PreRegion, (), Undirected>>,
+    goodnesses: Signal<HashMap<u32, Goodness>>,
     select: WriteSignal<Option<PreRegion>>,
     water_color: RwSignal<Color>,
     water_stroke: RwSignal<Color>,
@@ -59,49 +56,30 @@ pub fn DisplayPreMap(
     });
 
     // Good-ness (how good a region is based on how well distributed its borders are)
-    let (goodness_checked, set_goodness_checked) = create_signal(true);
+    let goodness_checked = create_rw_signal((false, false, true, true, true));
+    let show_goodness_checked = move || goodness_checked().0;
     let check_goodness = move |_ev: Event| {
-        set_goodness_checked.update(|b| *b = !*b);
+        goodness_checked.update(|(b, _, _, _, _)| *b = !*b);
     };
-
-    let is_goodness_ready = create_rw_signal(false); // set true once hashmap is filled
-
-    // border info
-    let border_info: RwSignal<HashMap<u32, (Position, HashMap<u32, (f32, f32)>)>> =
-        create_rw_signal(HashMap::new());
-    let update_border_info = move |i, j, dy: f32, dx: f32, posi, posj| {
-        is_goodness_ready.set(false);
-        log!("updated border info");
-        border_info.update(|bi| {
-            let length = (dx * dx + dy * dy).sqrt();
-            let angle = dy.atan2(dx); // from i to j !!!
-            let angle_j = angle + PI; // angle from the other region
-            let angle_i = (angle + TAU) % TAU; // both now in range [0, tau[
-
-            // having it as a hash map ensures it doesn't replace existing neighbors
-            let mut update = |i, j, ang, pos| {
-                let (_, neighbors) = bi.entry(i).or_insert((pos, HashMap::new()));
-                neighbors.insert(j, (length, ang));
-            };
-
-            update(i, j, angle_i, posi);
-            update(j, i, angle_j, posj);
-        })
+    let check_goodness_abs = move |_ev| {
+        goodness_checked.update(|(_, b, _, _, _)| *b = !*b);
     };
-
-    //let goodness = create_memo(move |_| {
-    //    log!("goodnesses checked");
-    //    if is_goodness_ready() {
-    //        goodnesses(border_info())
-    //    } else {
-    //        HashMap::new()
-    //    }
-    //});
+    let check_goodness_ang = move |_ev: Event| {
+        goodness_checked.update(|(_, _, b, _, _)| *b = !*b);
+    };
+    let check_goodness_num = move |_ev: Event| {
+        goodness_checked.update(|(_, _, _, b, _)| *b = !*b);
+    };
+    let check_goodness_len = move |_ev: Event| {
+        goodness_checked.update(|(_, _, _, _, b)| *b = !*b);
+    };
 
     // TODO: optimize all the cloning (probably not a huge deal)
-    let view_region = move |(_, pr): (usize, PreRegion)| {
+    let view_region = move |(i, pr): (usize, PreRegion)| {
         let stroke_info = move || {
-            if pr.color == water_color.get() {
+            if goodness_checked().0 {
+                ("none".into(), 0)
+            } else if pr.color == water_color.get() {
                 (water_stroke.get().to_string(), 2)
             } else if pr.has_base {
                 ("black".into(), 2)
@@ -114,16 +92,38 @@ pub fn DisplayPreMap(
 
         let pr_clone = pr.clone();
         let (fill, set_fill) = create_signal(pr.color);
-        let fill_str = move || fill().to_string();
         let highlight = move |_| set_fill.update(|col| *col = col.highlight(0.15));
         let unhighlight = move |_| set_fill(pr.color);
+
+        // If goodness is shown
+        let fill_str = move || {
+            if !goodness_checked().0 {
+                fill().to_string()
+            } else {
+                let (abs, rel) = goodnesses.with(|hm| hm[&(i as u32)].0);
+                let color = if goodness_checked().1 { abs } else { rel };
+                let (_, _, ang, num, len) = goodness_checked();
+                let (r, g, b) = color.get();
+                Color::new(ang as u8 * r, num as u8 * g, len as u8 * b).to_string()
+            }
+        };
+
+        let title = move || {
+            let name = pr.name.clone();
+            if !goodness_checked().0 {
+                name
+            } else {
+                let (abs, rel) = goodnesses.with(|hm| hm[&(i as u32)].0);
+                format!("{name}: abs: {abs}; rel: {rel}; id: {i}")
+            }
+        };
 
         view! {
             <path on:click=move|_|select(Some(pr_clone.clone())) on:mouseenter=highlight
                 on:mouseleave=unhighlight d=pr.shape.to_data_string()
                 stroke=stroke stroke-width=stroke_width stroke-linejoin="bevel"
                 fill=fill_str >
-                <title>{pr.name}</title>
+                <title>{title}</title>
             </path>
         }
     };
@@ -145,21 +145,9 @@ pub fn DisplayPreMap(
 
     // Border between two regions, colored to reflect the type of border
     // Also pushes the angle of the line onto the border_info
-    let view_border = move |(i, pr1): (u32, &PreRegion), (j, pr2): (u32, &PreRegion)| {
+    let view_border = move |pr1: &PreRegion, pr2: &PreRegion| {
         let (x1, y1) = pr1.pole.into();
         let (x2, y2) = pr2.pole.into();
-
-        // Extra bits for border_info
-        //if !is_goodness_ready() {
-        //    update_border_info(
-        //        i,
-        //        j,
-        //        y2 - y1,
-        //        x2 - x1,
-        //        get_pos(pr1, extent),
-        //        get_pos(pr2, extent),
-        //    );
-        //}
 
         let color1 = pr1.color;
         let color2 = pr2.color;
@@ -195,13 +183,10 @@ pub fn DisplayPreMap(
                 let pair = if i < j { (i, j) } else { (j, i) };
                 if !visited.contains(&pair) {
                     visited.insert(pair);
-                    views.push(view_border((i, pr), (j, &pre_regions[j])))
+                    views.push(view_border(pr, &pre_regions[j]))
                 }
             }
         }
-
-        // is_goodness_ready.set(true);
-        log!("goodness set to true");
 
         (
             views.into_view(),
@@ -254,12 +239,45 @@ pub fn DisplayPreMap(
             </Show></label>
         </div>
         <div class="checkbox-group">
-            <input type="checkbox" id="goodnesss" name="goodnesss" on:input=check_goodness />
-            <label for="goodnesss" ><Show when=goodness_checked fallback=||view!{
+            <input type="checkbox" id="goodnesses" name="goodnesses" on:input=check_goodness />
+            <label for="goodnesses" ><Show when=show_goodness_checked fallback=||view!{
                 <Lang hu="Értékelés mutatása" en="Show evaluation"/>}>
                 <Lang hu="Értékelés elrejtése" en="Hide evaluation"/>
             </Show></label>
         </div>
+        <Show when=show_goodness_checked fallback=||() >
+        <div class="goodness-checkboxes">
+            <div class="button-group">
+                <button type="button" id="goodness_abs" name="goodness_abs"
+                    on:click=check_goodness_abs >
+                <Show when=move||goodness_checked().1 fallback=||view!{
+                    <Lang hu="Abszolút értékelés mutatása" en="Show absolute evaluation"/>}>
+                    <Lang hu="Relatív értékelés mutatása" en="Show relative evaluation"/>
+                </Show></button>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="goodness_ang" name="goodness_ang"
+                    on:input=check_goodness_ang checked=move||goodness_checked().2/>
+                <label for="goodness_abs" >
+                    <Lang hu="Szögek jósága" en="Angular goodness"/>
+                </label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="goodness_num" name="goodness_num"
+                    on:input=check_goodness_num checked=move||goodness_checked().3/>
+                <label for="goodness_num" >
+                    <Lang hu="Szomszédok jósága" en="Neighbors goodness"/>
+                </label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="goodness_len" name="goodness_len"
+                    on:input=check_goodness_len checked=move||goodness_checked().4/>
+                <label for="goodness_len" >
+                    <Lang hu="Hosszak jósága" en="Lengthwise goodness"/>
+                </label>
+            </div>
+        </div>
+        </Show>
         </div>
     }
     .into_view()

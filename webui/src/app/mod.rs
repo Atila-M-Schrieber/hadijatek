@@ -7,6 +7,8 @@ mod account;
 mod components;
 mod game;
 
+pub use game::map::ProcessFile;
+
 use crate::auth::*;
 use account::*;
 use game::{map::*, *};
