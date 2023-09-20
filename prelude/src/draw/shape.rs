@@ -10,7 +10,7 @@ use std::{
 };
 use svg::node::element::path::{Command, Data, Parameters, Position};
 
-use super::Point;
+use super::{point::Distance, Point};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shape(Vec<Point>);
@@ -47,6 +47,46 @@ impl Shape {
         let poly: Polygon = self.clone().into();
         let point: geo::Coord = polylabel(&poly, &0.01)?.into();
         Ok(point.into())
+    }
+
+    pub fn intersects_x(&self, y: f32) -> Vec<f32> {
+        let mut xs = Vec::new();
+        let points = self.points();
+        let len = points.len();
+
+        for i in 0..len {
+            let j = (i + 1) % len;
+            let (x1, y1) = points[i].get();
+            let (x2, y2) = points[j].get();
+
+            // Check if segment crosses the line y
+            if (y1 <= y && y < y2) || (y2 <= y && y < y1) {
+                let x = x1 + (x2 - x1) * (y - y1) / (y2 - y1);
+                xs.push(x);
+            }
+        }
+
+        xs
+    }
+
+    pub fn intersects_y(&self, x: f32) -> Vec<f32> {
+        let mut ys = Vec::new();
+        let points = self.points();
+        let len = points.len();
+
+        for i in 0..len {
+            let j = (i + 1) % len;
+            let (x1, y1) = points[i].get();
+            let (x2, y2) = points[j].get();
+
+            // Check if segment crosses the line x
+            if (x1 <= x && x < x2) || (x2 <= x && x < x1) {
+                let y = y1 + (y2 - y1) * (x - x1) / (x2 - x1);
+                ys.push(y);
+            }
+        }
+
+        ys
     }
 }
 
@@ -86,6 +126,43 @@ impl Contains<&Point> for &Shape {
 impl Contains<&Shape> for &Shape {
     fn contains(&self, internal: &&Shape) -> bool {
         internal.points().iter().all(|p| self.contains(&p))
+    }
+}
+
+impl Distance<Point> for Shape {
+    type DistanceType = Point;
+    fn distance(&self, dist_to: &Point) -> Self::DistanceType {
+        let len = self.0.len();
+
+        let mut min_dist_sq = f32::MAX;
+
+        let mut closest_point = Point::new(0., 0.);
+
+        for i in 0..len {
+            let j = (i + 1) % len;
+            let p1 = self.0[i];
+            let p2 = self.0[j];
+
+            let segment = p2 - p1;
+            let vec_to_point = *dist_to - p1;
+
+            // closest point along segment's dist from p1 to p2 as lerp
+            let t = (segment * vec_to_point / segment.square()).min(1.).max(0.);
+
+            let projected_point = p1 + segment * t;
+            let dist_sq = (projected_point - *dist_to).square();
+
+            if dist_sq < min_dist_sq {
+                min_dist_sq = dist_sq;
+                closest_point = projected_point;
+            }
+        }
+
+        if self.contains(&dist_to) {
+            *dist_to - closest_point
+        } else {
+            closest_point - *dist_to
+        }
     }
 }
 

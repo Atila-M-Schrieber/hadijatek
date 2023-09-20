@@ -1,7 +1,7 @@
 use super::display::DisplayPreMap;
 use crate::app::*;
 use js_sys::Uint8Array;
-use map_utils::{Color, Goodness, PreProcessed, PreRegion};
+use map_utils::{Color, Goodness, Label, PreProcessed, PreRegion};
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use std::collections::HashMap;
 use web_sys::{File, SubmitEvent};
@@ -70,6 +70,13 @@ pub fn CreateMapPage() -> impl IntoView {
     let goodnesses: Signal<HashMap<u32, Goodness>> = Signal::derive(move || {
         if file_is_processed.get_untracked() {
             processed_file().clone().unwrap().unwrap().1
+        } else {
+            HashMap::new()
+        }
+    });
+    let initial_labels: Signal<HashMap<u32, Label>> = Signal::derive(move || {
+        if file_is_processed.get_untracked() {
+            processed_file().clone().unwrap().unwrap().2
         } else {
             HashMap::new()
         }
@@ -153,7 +160,8 @@ pub fn CreateMapPage() -> impl IntoView {
             </Show>
             <Show when=file_is_processed
                 fallback=||()>
-                <DisplayPreMap pre_regions=pre_regions goodnesses=goodnesses select=select
+                <DisplayPreMap pre_regions=pre_regions goodnesses=goodnesses
+                    initial_labels=initial_labels select=select
                     water_color=water_color water_stroke=water_stroke
                     land_stroke=land_stroke done=set_can_contract />
                 <div  >

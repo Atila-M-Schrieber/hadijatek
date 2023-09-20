@@ -58,6 +58,9 @@ features = [
 	"Blob",
 	"FileList",
 	"FileReaderSync",
+	"SvgGraphicsElement",
+	"SvgTextElement",
+	"SvgRect",
 ]
 
 [features]

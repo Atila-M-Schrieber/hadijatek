@@ -1,11 +1,13 @@
-use leptos::ev::Event;
 use leptos::*;
-use map_utils::{Color, Goodness, Point, PreRegion};
+use leptos::{ev::Event, svg::Text};
+use map_utils::{Color, Goodness, Label, Point, PreRegion, Shape};
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
 };
+use wasm_bindgen::JsCast;
+use web_sys::SvgTextElement;
 
 use crate::lang::*;
 
@@ -13,6 +15,7 @@ use crate::lang::*;
 pub fn DisplayPreMap(
     pre_regions: Signal<Csr<PreRegion, (), Undirected>>,
     goodnesses: Signal<HashMap<u32, Goodness>>,
+    initial_labels: Signal<HashMap<u32, Label>>,
     select: WriteSignal<Option<PreRegion>>,
     water_color: RwSignal<Color>,
     water_stroke: RwSignal<Color>,
@@ -108,23 +111,11 @@ pub fn DisplayPreMap(
             }
         };
 
-        let title = move || {
-            let name = pr.name.clone();
-            if !goodness_checked().0 {
-                name
-            } else {
-                let (abs, rel) = goodnesses.with(|hm| hm[&(i as u32)].0);
-                format!("{name}: abs: {abs}; rel: {rel}; id: {i}")
-            }
-        };
-
         view! {
             <path on:click=move|_|select(Some(pr_clone.clone())) on:mouseenter=highlight
                 on:mouseleave=unhighlight d=pr.shape.to_data_string()
                 stroke=stroke stroke-width=stroke_width stroke-linejoin="bevel"
-                fill=fill_str >
-                <title>{title}</title>
-            </path>
+                fill=fill_str />
         }
     };
 
@@ -136,6 +127,52 @@ pub fn DisplayPreMap(
         done(true);
         view
     };
+
+    let view_name = move |(_i, pr): (usize, PreRegion)| {
+        let text_ref = create_node_ref::<Text>();
+
+        let (text_locked, set_text_locked) = create_signal(true);
+        create_effect(move |_| request_animation_frame(move || set_text_locked(false)));
+
+        let font_size = create_rw_signal(13);
+
+        let text_pos = create_memo(move |_| {
+            let mut base_pos = (
+                pr.pole.get().0, // - len as f32 * 13. / 4.,
+                pr.pole.get().1, // + 13. / 3.,
+            );
+            if text_locked() {
+                return base_pos;
+            }
+            if let Some(text_ref) = text_ref() {
+                if let Ok(b_box) = (*text_ref)
+                    .clone()
+                    .dyn_into::<SvgTextElement>()
+                    .map(|tr| tr.get_bounding_client_rect())
+                {
+                    let wh = (b_box.width() as f32, b_box.height() as f32);
+                    let (new_x, new_font_size) = get_new_name_x(base_pos, wh, &pr.shape, font_size);
+                    font_size.set(new_font_size);
+                    base_pos = (new_x, base_pos.1)
+                }
+            }
+            base_pos
+        });
+
+        let text_pos_x = move || text_pos().0;
+        let text_pos_y = move || text_pos().1;
+
+        let style_string = move || format!("font: {}px serif;pointer-events:none;", font_size());
+
+        view! {
+            <text node_ref=text_ref x=text_pos_x y=text_pos_y
+                text-anchor="middle" dy="0.35em" style=style_string >
+                {pr.name}
+            </text>
+        }
+    };
+
+    let view_names = move || pre_regions_vec().into_iter().map(view_name).collect_view();
 
     // toggle borders
     let (border_checked, set_border_checked) = create_signal(true);
@@ -159,9 +196,10 @@ pub fn DisplayPreMap(
         let border_color = border_color.to_string();
 
         view! {
-            <line x1=x1 y1=y1 x2=x2 y2=y2 stroke="black" stroke-width="3"/>
+            <line x1=x1 y1=y1 x2=x2 y2=y2 stroke="black" stroke-width="3"
+                style="pointer-events: none;"/>
             <line x1=x1 y1=y1 x2=x2 y2=y2
-                stroke=border_color stroke-width="1"/>
+                stroke=border_color stroke-width="1" style="pointer-events: none;"/>
         }
     };
 
@@ -228,6 +266,10 @@ pub fn DisplayPreMap(
                 {view_borders().0/* .get_value() */}
                 {cover_all_lines}
                 </Show>
+                {/* initial_labels().values().map(|(p, _)| view!{
+                    <circle cx={p.get().0} cy={p.get().1} r=3 fill="black"/>
+                }).collect_view() */}
+                {view_names}
                 <rect x=0 y=0 width=extent.0 height=extent.1 stroke="black" fill="none" />
             </svg>
         </div>
@@ -281,4 +323,63 @@ pub fn DisplayPreMap(
         </div>
     }
     .into_view()
+}
+
+// Sets the optimal x value, and the font size to go with it
+fn get_new_name_x(
+    (x, y): (f32, f32),
+    (w, h): (f32, f32),
+    shape: &Shape,
+    font_size: RwSignal<usize>,
+) -> (f32, usize) {
+    let mut new_font_size = font_size();
+    let font_height_ratio = h / new_font_size as f32;
+    let wh_ratio = w / h;
+
+    let mut new_x = x;
+
+    while new_font_size >= 1 {
+        let dy = font_height_ratio * new_font_size as f32 / 2.;
+        let upper_y = y + dy;
+        let lower_y = y - dy;
+
+        let upper_intersects = shape.intersects_x(upper_y);
+        let lower_intersects = shape.intersects_x(lower_y);
+
+        let left = move |v: &[f32]| {
+            *v.iter()
+                .filter(|&&ix| ix - x < 0.)
+                .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap_or(&0.)
+        };
+        let right = move |v: &[f32]| {
+            *v.iter()
+                .filter(|&&ix| ix - x > 0.)
+                .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap_or(&0.)
+        };
+
+        // cloest intersects
+        let ul = left(&upper_intersects);
+        let ur = right(&upper_intersects);
+        let ll = left(&lower_intersects);
+        let lr = right(&lower_intersects);
+
+        // Get the closest pair - this is the rectangle
+        let (l, r) = (ul.max(ll), ur.min(lr));
+
+        if (r - l) / (2. * dy) >= wh_ratio {
+            let ideal_x = (l + r) / 2.;
+            new_x = ideal_x;
+            //let diff = ideal_x - x;
+            //if diff.abs() > dy {
+            //    new_x = ideal_x - diff.signum() * dy;
+            //}
+            break;
+        }
+
+        new_font_size -= 1;
+    }
+
+    (new_x, new_font_size)
 }
