@@ -77,6 +77,12 @@ pub fn DisplayPreMap(
         goodness_checked.update(|(_, _, _, _, b)| *b = !*b);
     };
 
+    let highlights = create_memo(move |_| {
+        (0..pre_regions_vec.with(|v| v.len()))
+            .map(|_| create_rw_signal(false))
+            .collect::<Vec<_>>()
+    });
+
     // TODO: optimize all the cloning (probably not a huge deal)
     let view_region = move |(i, pr): (usize, PreRegion)| {
         let stroke_info = move || {
@@ -94,9 +100,18 @@ pub fn DisplayPreMap(
         let stroke_width = move || stroke_info().1;
 
         let pr_clone = pr.clone();
-        let (fill, set_fill) = create_signal(pr.color);
-        let highlight = move |_| set_fill.update(|col| *col = col.highlight(0.15));
-        let unhighlight = move |_| set_fill(pr.color);
+        let highlight = move |_| {
+            highlights.with(|v| v[i].set(true));
+        };
+        let unhighlight = move |_| highlights.with(|v| v[i].set(false)); //set_fill(pr.color);
+
+        let fill = move || {
+            if highlights.with(|v| v[i]()) {
+                pr.color.highlight(0.15)
+            } else {
+                pr.color
+            }
+        };
 
         // If goodness is shown
         let fill_str = move || {
@@ -128,13 +143,14 @@ pub fn DisplayPreMap(
         view
     };
 
-    let view_name = move |(_i, pr): (usize, PreRegion)| {
+    let view_name = move |(i, pr): (usize, PreRegion)| {
         let text_ref = create_node_ref::<Text>();
 
         let (text_locked, set_text_locked) = create_signal(true);
         create_effect(move |_| request_animation_frame(move || set_text_locked(false)));
 
-        let font_size = create_rw_signal(13);
+        let fitting_font_size = create_rw_signal(13);
+        let text_wh = create_rw_signal((0., 0.));
 
         let text_pos = create_memo(move |_| {
             let mut base_pos = (
@@ -151,20 +167,40 @@ pub fn DisplayPreMap(
                     .map(|tr| tr.get_bounding_client_rect())
                 {
                     let wh = (b_box.width() as f32, b_box.height() as f32);
-                    let (new_x, new_font_size) = get_new_name_x(base_pos, wh, &pr.shape, font_size);
-                    font_size.set(new_font_size);
+                    text_wh.set(wh);
+                    let (new_x, new_font_size) = get_new_name_x(base_pos, wh, &pr.shape, 13);
+                    fitting_font_size.set(new_font_size);
                     base_pos = (new_x, base_pos.1)
                 }
             }
             base_pos
         });
 
+        let font_size = move || {
+            if highlights.with(|v| v[i]()) {
+                14
+            } else {
+                fitting_font_size()
+            }
+        };
+
         let text_pos_x = move || text_pos().0;
         let text_pos_y = move || text_pos().1;
 
-        let style_string = move || format!("font: {}px serif;pointer-events:none;", font_size());
+        let style_string = move || format!("font: {}px serif;", font_size());
+
+        let highlight_opacity = move || {
+            let val = if highlights.with(|v| v[i]()) { 0.8 } else { 0. };
+            format!("opacity:{val};")
+        };
+
+        let rect_x = move || text_pos_x() - text_wh().0 / 2.;
+        let rect_y = move || text_pos_y() - text_wh().1 / 2.;
+        let rect_r = move || text_wh().1 / 8.;
 
         view! {
+            <rect class="highlight-rect" style=highlight_opacity x=rect_x y=rect_y rx=rect_r
+                width=move||text_wh().0 height=move||text_wh().1  />
             <text node_ref=text_ref x=text_pos_x y=text_pos_y
                 text-anchor="middle" dy="0.35em" style=style_string >
                 {pr.name}
@@ -263,13 +299,15 @@ pub fn DisplayPreMap(
             <svg viewBox=format!("0 0 {} {}", extent.0, extent.1) >
                 {view_regions}
                 <Show when=border_checked fallback=||() >
-                {view_borders().0/* .get_value() */}
-                {cover_all_lines}
+                    {view_borders().0/* .get_value() */}
+                    {cover_all_lines}
                 </Show>
                 {/* initial_labels().values().map(|(p, _)| view!{
                     <circle cx={p.get().0} cy={p.get().1} r=3 fill="black"/>
                 }).collect_view() */}
-                {view_names}
+                <Show when=move||!goodness_checked().0 fallback=||()>
+                    {view_names}
+                </Show>
                 <rect x=0 y=0 width=extent.0 height=extent.1 stroke="black" fill="none" />
             </svg>
         </div>
@@ -330,9 +368,9 @@ fn get_new_name_x(
     (x, y): (f32, f32),
     (w, h): (f32, f32),
     shape: &Shape,
-    font_size: RwSignal<usize>,
+    initial_font_size: usize,
 ) -> (f32, usize) {
-    let mut new_font_size = font_size();
+    let mut new_font_size = initial_font_size;
     let font_height_ratio = h / new_font_size as f32;
     let wh_ratio = w / h;
 

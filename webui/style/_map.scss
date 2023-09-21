@@ -7,5 +7,26 @@
 		max-width: 2000px;
 		min-width: 1200px;
 		height: 100%;
+
+		path {
+			transition: fill 0.2s ease;
+		}
+
+		line {
+			pointer-events:none;
+		}
+
+		text {
+			transition: font 0.3s ease;
+			pointer-events:none;
+		}
+
+		.highlight-rect {
+			fill: #ccc;
+			stroke-width: 1;
+			stroke: #666;
+			pointer-events:none;
+			transition: opacity 0.3s ease;
+		}
 	}
 }
