@@ -51,7 +51,6 @@ pub fn DisplayPreMap(
         // sort signal based on the water_color (within the definition of the signal)
         let mut pre_regions_vec = pre_regions_vec.clone();
         let wc = water_color.get(); // for some reason this warns
-        let len = pre_regions_vec.len() as f32;
         pre_regions_vec.sort_by(|(_, pr1), (_, pr2)| match (pr1.color, pr2.color) {
             (c, c_) if c == c_ && c == wc => Ordering::Equal,
             (c, _) if c == wc => Ordering::Less,
@@ -157,18 +156,25 @@ pub fn DisplayPreMap(
 
         let fitting_font_size = create_rw_signal(13);
         let name_wh = create_rw_signal((1., 1.)); // 1 to avoid inf/nan
-        let info_wh = move || {
-            // let _ = highlighted.with(|_| ()); // subscribe to highlighted
+        let times_info_wh_called = create_rw_signal(0);
+        let info_wh = create_memo(move |prev: Option<&(f32, f32)>| {
             let mut wh = (1., 1.);
             if text_locked() {
                 return wh;
             }
+            if let Some(prev) = prev {
+                if times_info_wh_called() > 2 {
+                    return *prev;
+                }
+            }
+            times_info_wh_called.update(|n| *n += 1);
+            let _ = highlighted.with(|_| ()); // subscribe to highlighted
             if let Some(info_ref) = info_ref() {
                 let b_box = info_ref.get_bounding_client_rect();
                 wh = (b_box.width() as f32, b_box.height() as f32);
             }
             wh
-        };
+        });
         let text_wh = move || {
             let (nw, nh): (f32, f32) = name_wh();
             let (iw, ih) = info_wh(); // info dims are 'regular'-scale, name dims are svg-scale
@@ -196,7 +202,14 @@ pub fn DisplayPreMap(
             }
         });
 
-        let name_pos = create_memo(move |_| {
+        let times_name_pos_called = create_rw_signal(0);
+        let name_pos = create_memo(move |prev: Option<&(f32, f32)>| {
+            if let Some(prev) = prev {
+                if times_name_pos_called() > 1 {
+                    return *prev;
+                }
+            }
+            times_name_pos_called.update(|n| *n += 1);
             let mut base_pos = (
                 pr.pole.get().0, // - len as f32 * 13. / 4.,
                 pr.pole.get().1, // + 13. / 3.,
@@ -229,13 +242,28 @@ pub fn DisplayPreMap(
         };
 
         let name_pos_x = move || name_pos().0;
-        let name_pos_y = move || name_pos().1;
+        let name_pos_y = move || {
+            name_pos().1
+                - if highlighted.with(|hs| hs.contains(&i)) && overflows() {
+                    info_wh().1 - name_wh().1
+                } else {
+                    0.
+                }
+        };
+        let expanded_name_pos_y = move || {
+            name_pos().1
+                - if overflows() {
+                    info_wh().1 - name_wh().1
+                } else {
+                    0.
+                }
+        };
 
         let style_string = move || format!("font: {}px serif;", font_size());
 
         let highlight_opacity = move || {
             let val = if highlighted.with(|hs| hs.contains(&i)) {
-                0.8
+                0.9
             } else {
                 0.
             };
@@ -243,29 +271,26 @@ pub fn DisplayPreMap(
         };
 
         let rect_x = move || name_pos_x() - name_wh().0 / 2.;
-        let rect_y = move || name_pos_y() - name_wh().1 / 2.;
+        let rect_y = move || expanded_name_pos_y() - name_wh().1 / 2.;
         let rect_r = move || name_wh().1 / 8.;
+
+        let info_y = move || expanded_name_pos_y() + name_wh().1 / 2.;
 
         view! {
             <svg>
-                <rect class="highlight-rect" style=highlight_opacity x=rect_x
-                    y=move|| {
-                        rect_y() - info_wh().1/* - if overflows() {
-                            // info_wh().1
-                            0.
-                        } else {0.}*/
-                    }
-                    rx=rect_r width=move||text_wh().0 height=move||text_wh().1  />
+                <rect class="highlight-rect" style=highlight_opacity x=rect_x y=rect_y rx=rect_r
+                    width=move||text_wh().0 height=move||text_wh().1 />
                 <text node_ref=name_ref x=name_pos_x y=name_pos_y
                     text-anchor="middle" dy="0.35em" style=style_string >
                     {pr.name}
                 </text>
                 <foreignObject
-                    x=move||name_pos_x()-name_wh().0/2. y=move||name_pos_y()+name_wh().1/2.
+                    x=move||name_pos_x()-name_wh().0/2. y=info_y
                     width=move||text_wh().0 height=extent.1
                     style=highlight_opacity
                 >
                     <div node_ref=info_ref style="font-size: 12px;" >
+                        <hr/>
                         <p>Info thing that may wrap</p>
                         <p>More info</p>
                     </div>

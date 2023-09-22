@@ -17,7 +17,7 @@
 		}
 
 		text {
-			transition: font 0.3s ease;
+			transition: font 0.3s ease, y 0.3s ease;
 			pointer-events:none;
 		}
 
@@ -28,6 +28,10 @@
 				margin-bottom: 0px;
 				margin-top: 5px;
 			}
+
+			hr {
+				margin: 0px;
+			}
 		}
 
 		.highlight-rect {
@@ -35,7 +39,7 @@
 			stroke-width: 1;
 			stroke: #666;
 			pointer-events:none;
-			transition: opacity 0.3s ease;
+			transition: opacity 0.4s ease;
 		}
 	}
 }
