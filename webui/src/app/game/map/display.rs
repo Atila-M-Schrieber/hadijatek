@@ -51,6 +51,7 @@ pub fn DisplayPreMap(
         // sort signal based on the water_color (within the definition of the signal)
         let mut pre_regions_vec = pre_regions_vec.clone();
         let wc = water_color.get(); // for some reason this warns
+        let len = pre_regions_vec.len() as f32;
         pre_regions_vec.sort_by(|(_, pr1), (_, pr2)| match (pr1.color, pr2.color) {
             (c, c_) if c == c_ && c == wc => Ordering::Equal,
             (c, _) if c == wc => Ordering::Less,
@@ -157,7 +158,7 @@ pub fn DisplayPreMap(
         let fitting_font_size = create_rw_signal(13);
         let name_wh = create_rw_signal((1., 1.)); // 1 to avoid inf/nan
         let info_wh = move || {
-            let _ = highlighted.with(|_| ()); // subscribe to highlighted
+            // let _ = highlighted.with(|_| ()); // subscribe to highlighted
             let mut wh = (1., 1.);
             if text_locked() {
                 return wh;
@@ -169,10 +170,31 @@ pub fn DisplayPreMap(
             wh
         };
         let text_wh = move || {
-            let (nw, nh) = name_wh();
+            let (nw, nh): (f32, f32) = name_wh();
             let (iw, ih) = info_wh(); // info dims are 'regular'-scale, name dims are svg-scale
-            (nw, 1.25 * nh + ih * nw / iw) // Have to scale ih to match svg dims
+            (
+                nw,                       // Extra space for info for short names
+                1.25 * nh + ih * nw / iw, // Have to scale ih to match svg dims
+            )
         };
+        let prnc = pr.name.clone();
+        //create_effect(move |_| {
+        //    log!(
+        //        "{}: text_wh: {:?}, name_wh: {:?}, what to min: {}",
+        //        &prnc,
+        //        text_wh(),
+        //        name_wh(),
+        //        name_wh().1 * 5.
+        //    )
+        //});
+
+        let overflows = move || pr.pole.get().1 + text_wh().1 - name_wh().1 / 2. > extent.1;
+
+        create_effect(move |_| {
+            if overflows() {
+                log!("{} overflows", prnc)
+            }
+        });
 
         let name_pos = create_memo(move |_| {
             let mut base_pos = (
@@ -188,9 +210,9 @@ pub fn DisplayPreMap(
                     .dyn_into::<SvgTextElement>()
                     .map(|tr| tr.get_bounding_client_rect())
                 {
-                    let wh = (b_box.width() as f32, b_box.height() as f32);
-                    name_wh.set(wh); // Initial wh
-                    let (new_x, new_font_size) = get_new_name_x(base_pos, wh, &pr.shape, 13);
+                    let (w, h) = (b_box.width() as f32, b_box.height() as f32);
+                    name_wh.set((w.max(h * 4.), h)); // Initial wh + padding
+                    let (new_x, new_font_size) = get_new_name_x(base_pos, (w, h), &pr.shape, 13);
                     fitting_font_size.set(new_font_size);
                     base_pos = (new_x, base_pos.1)
                 }
@@ -226,8 +248,14 @@ pub fn DisplayPreMap(
 
         view! {
             <svg>
-                <rect class="highlight-rect" style=highlight_opacity x=rect_x y=rect_y rx=rect_r
-                    width=move||text_wh().0 height=move||text_wh().1  />
+                <rect class="highlight-rect" style=highlight_opacity x=rect_x
+                    y=move|| {
+                        rect_y() - info_wh().1/* - if overflows() {
+                            // info_wh().1
+                            0.
+                        } else {0.}*/
+                    }
+                    rx=rect_r width=move||text_wh().0 height=move||text_wh().1  />
                 <text node_ref=name_ref x=name_pos_x y=name_pos_y
                     text-anchor="middle" dy="0.35em" style=style_string >
                     {pr.name}
@@ -247,33 +275,20 @@ pub fn DisplayPreMap(
         .into_view()
     };
 
-    /*let view_infos = create_memo(move |prev: Option<&Vec<(usize, View)>>| {
-        let not_first = prev.is_some();
-        if highlighted.with(|hs| hs.len() == 0) && not_first {
-            return prev.unwrap().clone();
-        }
-        let mut prv = pre_regions_vec();
-        if highlighted.with(|hs| hs.len() > 0) && prev.is_some() {
-            highlighted.with(|hs| {
-                hs.iter().for_each(|i| {
-                    log!("{i} is highlighted");
-                    let idx = prv.iter().position(|(idx, _)| idx == i).expect("valid i");
-                    let removed = prv.remove(idx);
-                    prv.push(removed)
-                })
-            });
-        }
-        prv.into_iter()
-            .map(view_info)
-            .enumerate()
-            .collect::<Vec<_>>()
-    });*/
     let view_infos = move || {
-        pre_regions_vec()
-            .into_iter()
-            .map(view_info)
-            .enumerate()
-            .collect::<Vec<_>>()
+        let mut prv = pre_regions_vec();
+        let len = prv.len() as f32;
+        prv.sort_by(|(_, pr1), (_, pr2)| {
+            let dist = |p: Point| (extent.1 * (1. - 0.5 / len.sqrt()) - p.get().1).abs();
+            if (pr1.color == water_color()) == (pr2.color == water_color()) {
+                dist(pr1.pole)
+                    .partial_cmp(&dist(pr2.pole))
+                    .unwrap_or(Ordering::Equal)
+            } else {
+                Ordering::Equal
+            }
+        });
+        prv.into_iter().map(view_info).enumerate().collect_view()
     };
 
     // toggle borders
@@ -487,3 +502,26 @@ fn get_new_name_x(
 
     (new_x, new_font_size)
 }
+
+// proper rendering, maybe?
+/*let view_infos = create_memo(move |prev: Option<&Vec<(usize, View)>>| {
+    let not_first = prev.is_some();
+    if highlighted.with(|hs| hs.len() == 0) && not_first {
+        return prev.unwrap().clone();
+    }
+    let mut prv = pre_regions_vec();
+    if highlighted.with(|hs| hs.len() > 0) && prev.is_some() {
+        highlighted.with(|hs| {
+            hs.iter().for_each(|i| {
+                log!("{i} is highlighted");
+                let idx = prv.iter().position(|(idx, _)| idx == i).expect("valid i");
+                let removed = prv.remove(idx);
+                prv.push(removed)
+            })
+        });
+    }
+    prv.into_iter()
+        .map(view_info)
+        .enumerate()
+        .collect::<Vec<_>>()
+});*/
