@@ -1,3 +1,5 @@
+use leptos::html::Div;
+use leptos::svg::Svg;
 use leptos::*;
 use leptos::{ev::Event, svg::Text};
 use map_utils::{Color, Goodness, Label, Point, PreRegion, Shape};
@@ -77,11 +79,7 @@ pub fn DisplayPreMap(
         goodness_checked.update(|(_, _, _, _, b)| *b = !*b);
     };
 
-    let highlights = create_memo(move |_| {
-        (0..pre_regions_vec.with(|v| v.len()))
-            .map(|_| create_rw_signal(false))
-            .collect::<Vec<_>>()
-    });
+    let highlighted = create_rw_signal(HashSet::new()); // the highlighted fields
 
     // TODO: optimize all the cloning (probably not a huge deal)
     let view_region = move |(i, pr): (usize, PreRegion)| {
@@ -101,12 +99,18 @@ pub fn DisplayPreMap(
 
         let pr_clone = pr.clone();
         let highlight = move |_| {
-            highlights.with(|v| v[i].set(true));
+            highlighted.update(|hs| {
+                hs.insert(i);
+            });
         };
-        let unhighlight = move |_| highlights.with(|v| v[i].set(false)); //set_fill(pr.color);
+        let unhighlight = move |_| {
+            highlighted.update(|hs| {
+                hs.remove(&i);
+            })
+        }; //set_fill(pr.color);
 
         let fill = move || {
-            if highlights.with(|v| v[i]()) {
+            if highlighted.with(|hs| hs.contains(&i)) {
                 pr.color.highlight(0.15)
             } else {
                 pr.color
@@ -143,16 +147,34 @@ pub fn DisplayPreMap(
         view
     };
 
-    let view_name = move |(i, pr): (usize, PreRegion)| {
-        let text_ref = create_node_ref::<Text>();
+    let view_info = move |(i, pr): (usize, PreRegion)| {
+        let name_ref = create_node_ref::<Text>();
+        let info_ref = create_node_ref::<Div>();
 
         let (text_locked, set_text_locked) = create_signal(true);
         create_effect(move |_| request_animation_frame(move || set_text_locked(false)));
 
         let fitting_font_size = create_rw_signal(13);
-        let text_wh = create_rw_signal((0., 0.));
+        let name_wh = create_rw_signal((1., 1.)); // 1 to avoid inf/nan
+        let info_wh = move || {
+            let _ = highlighted.with(|_| ()); // subscribe to highlighted
+            let mut wh = (1., 1.);
+            if text_locked() {
+                return wh;
+            }
+            if let Some(info_ref) = info_ref() {
+                let b_box = info_ref.get_bounding_client_rect();
+                wh = (b_box.width() as f32, b_box.height() as f32);
+            }
+            wh
+        };
+        let text_wh = move || {
+            let (nw, nh) = name_wh();
+            let (iw, ih) = info_wh(); // info dims are 'regular'-scale, name dims are svg-scale
+            (nw, 1.25 * nh + ih * nw / iw) // Have to scale ih to match svg dims
+        };
 
-        let text_pos = create_memo(move |_| {
+        let name_pos = create_memo(move |_| {
             let mut base_pos = (
                 pr.pole.get().0, // - len as f32 * 13. / 4.,
                 pr.pole.get().1, // + 13. / 3.,
@@ -160,14 +182,14 @@ pub fn DisplayPreMap(
             if text_locked() {
                 return base_pos;
             }
-            if let Some(text_ref) = text_ref() {
-                if let Ok(b_box) = (*text_ref)
+            if let Some(name_ref) = name_ref() {
+                if let Ok(b_box) = (*name_ref)
                     .clone()
                     .dyn_into::<SvgTextElement>()
                     .map(|tr| tr.get_bounding_client_rect())
                 {
                     let wh = (b_box.width() as f32, b_box.height() as f32);
-                    text_wh.set(wh);
+                    name_wh.set(wh); // Initial wh
                     let (new_x, new_font_size) = get_new_name_x(base_pos, wh, &pr.shape, 13);
                     fitting_font_size.set(new_font_size);
                     base_pos = (new_x, base_pos.1)
@@ -177,38 +199,82 @@ pub fn DisplayPreMap(
         });
 
         let font_size = move || {
-            if highlights.with(|v| v[i]()) {
+            if highlighted.with(|hs| hs.contains(&i)) {
                 14
             } else {
                 fitting_font_size()
             }
         };
 
-        let text_pos_x = move || text_pos().0;
-        let text_pos_y = move || text_pos().1;
+        let name_pos_x = move || name_pos().0;
+        let name_pos_y = move || name_pos().1;
 
         let style_string = move || format!("font: {}px serif;", font_size());
 
         let highlight_opacity = move || {
-            let val = if highlights.with(|v| v[i]()) { 0.8 } else { 0. };
+            let val = if highlighted.with(|hs| hs.contains(&i)) {
+                0.8
+            } else {
+                0.
+            };
             format!("opacity:{val};")
         };
 
-        let rect_x = move || text_pos_x() - text_wh().0 / 2.;
-        let rect_y = move || text_pos_y() - text_wh().1 / 2.;
-        let rect_r = move || text_wh().1 / 8.;
+        let rect_x = move || name_pos_x() - name_wh().0 / 2.;
+        let rect_y = move || name_pos_y() - name_wh().1 / 2.;
+        let rect_r = move || name_wh().1 / 8.;
 
         view! {
-            <rect class="highlight-rect" style=highlight_opacity x=rect_x y=rect_y rx=rect_r
-                width=move||text_wh().0 height=move||text_wh().1  />
-            <text node_ref=text_ref x=text_pos_x y=text_pos_y
-                text-anchor="middle" dy="0.35em" style=style_string >
-                {pr.name}
-            </text>
+            <svg>
+                <rect class="highlight-rect" style=highlight_opacity x=rect_x y=rect_y rx=rect_r
+                    width=move||text_wh().0 height=move||text_wh().1  />
+                <text node_ref=name_ref x=name_pos_x y=name_pos_y
+                    text-anchor="middle" dy="0.35em" style=style_string >
+                    {pr.name}
+                </text>
+                <foreignObject
+                    x=move||name_pos_x()-name_wh().0/2. y=move||name_pos_y()+name_wh().1/2.
+                    width=move||text_wh().0 height=extent.1
+                    style=highlight_opacity
+                >
+                    <div node_ref=info_ref style="font-size: 12px;" >
+                        <p>Info thing that may wrap</p>
+                        <p>More info</p>
+                    </div>
+                </foreignObject>
+            </svg>
         }
+        .into_view()
     };
 
-    let view_names = move || pre_regions_vec().into_iter().map(view_name).collect_view();
+    /*let view_infos = create_memo(move |prev: Option<&Vec<(usize, View)>>| {
+        let not_first = prev.is_some();
+        if highlighted.with(|hs| hs.len() == 0) && not_first {
+            return prev.unwrap().clone();
+        }
+        let mut prv = pre_regions_vec();
+        if highlighted.with(|hs| hs.len() > 0) && prev.is_some() {
+            highlighted.with(|hs| {
+                hs.iter().for_each(|i| {
+                    log!("{i} is highlighted");
+                    let idx = prv.iter().position(|(idx, _)| idx == i).expect("valid i");
+                    let removed = prv.remove(idx);
+                    prv.push(removed)
+                })
+            });
+        }
+        prv.into_iter()
+            .map(view_info)
+            .enumerate()
+            .collect::<Vec<_>>()
+    });*/
+    let view_infos = move || {
+        pre_regions_vec()
+            .into_iter()
+            .map(view_info)
+            .enumerate()
+            .collect::<Vec<_>>()
+    };
 
     // toggle borders
     let (border_checked, set_border_checked) = create_signal(true);
@@ -306,7 +372,7 @@ pub fn DisplayPreMap(
                     <circle cx={p.get().0} cy={p.get().1} r=3 fill="black"/>
                 }).collect_view() */}
                 <Show when=move||!goodness_checked().0 fallback=||()>
-                    {view_names}
+                    {view_infos}
                 </Show>
                 <rect x=0 y=0 width=extent.0 height=extent.1 stroke="black" fill="none" />
             </svg>

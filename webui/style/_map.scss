@@ -21,6 +21,15 @@
 			pointer-events:none;
 		}
 
+		foreignObject {
+			pointer-events:none;
+
+			p {
+				margin-bottom: 0px;
+				margin-top: 5px;
+			}
+		}
+
 		.highlight-rect {
 			fill: #ccc;
 			stroke-width: 1;
