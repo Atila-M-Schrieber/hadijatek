@@ -23,6 +23,7 @@
 
 		foreignObject {
 			pointer-events:none;
+			font-size: 12px;
 
 			p {
 				margin-bottom: 0px;
@@ -40,6 +41,46 @@
 			stroke: #666;
 			pointer-events:none;
 			transition: opacity 0.4s ease;
+		}
+	}
+}
+
+.info-container {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-items: center;
+
+	.info {
+		box-sizing: border-box;
+		display: inline-flex;
+		flex-direction: column;
+		align-items: flex-start;
+		margin: 10px; // Add some margin around each box
+		padding: 10px; // Add internal padding
+		border: 1px solid #ccc; // Add border to make it look like a box
+		border-radius: 10px;
+		background-color: #f9f9f9; // Background color for the box
+		font-size: 15px;
+		align-items:center;
+
+		.name {
+			width: 100%;
+			font-size: 16px;
+			font-weight: bold;
+		}
+		
+		p {
+		  margin: 0;
+		  white-space: nowrap; // Ensures the box is as wide as the internal content
+		}
+		
+		hr {
+		  width: 100%;
+		}
+
+		svg {
+		  	width: 75px;
 		}
 	}
 }

@@ -88,6 +88,31 @@ impl Shape {
 
         ys
     }
+
+    pub fn area_signed(&self) -> f32 {
+        let len = self.0.len();
+        let mut area = 0.;
+        for i in 0..len {
+            let (x0, y0) = self.0[i].get();
+            let (x1, y1) = self.0[(i + 1) % len].get();
+
+            area += x0 * y1 - x1 * y0;
+        }
+        area
+    }
+
+    pub fn area(&self) -> f32 {
+        self.area_signed().abs()
+    }
+
+    pub fn centroid(&self) -> Point {
+        let len = self.0.len();
+        let (xs, ys): (Vec<_>, Vec<_>) = self.0.iter().map(Point::get_ref).unzip();
+        Point::new(
+            xs.into_iter().sum::<f32>() / len as f32,
+            ys.into_iter().sum::<f32>() / len as f32,
+        )
+    }
 }
 
 /// Trait for types that may "physically" contain (other) types

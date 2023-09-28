@@ -2,6 +2,8 @@ use leptos::html::Div;
 use leptos::svg::Svg;
 use leptos::*;
 use leptos::{ev::Event, svg::Text};
+use map_utils::team::Team;
+use map_utils::unit::UnitType;
 use map_utils::{Color, Goodness, Label, Point, PreRegion, Shape};
 use petgraph::{csr::Csr, visit::IntoNodeReferences, Undirected};
 use std::{
@@ -17,7 +19,7 @@ use crate::lang::*;
 pub fn DisplayPreMap(
     pre_regions: Signal<Csr<PreRegion, (), Undirected>>,
     goodnesses: Signal<HashMap<u32, Goodness>>,
-    initial_labels: Signal<HashMap<u32, Label>>,
+    teams: RwSignal<Vec<(usize, RwSignal<Color>, RwSignal<String>)>>,
     select: WriteSignal<Option<PreRegion>>,
     water_color: RwSignal<Color>,
     water_stroke: RwSignal<Color>,
@@ -29,6 +31,8 @@ pub fn DisplayPreMap(
         prs if prs.node_references().next().is_none() => return ().into_view(),
         prs => prs,
     };
+    let pre_regions_signal = pre_regions.clone(); // TODO: optimize this
+    let pre_regions_signal = Signal::derive(move || pre_regions_signal.clone());
     let pre_regions_vec: Vec<(usize, PreRegion)> = pre_regions
         .node_references()
         .map(|(i, pr)| (i as usize, pr.clone()))
@@ -46,7 +50,7 @@ pub fn DisplayPreMap(
         })
         .into();
 
-    // make this a derived signal so auto-sort for water color & the like
+    let index_map = create_rw_signal(HashMap::new());
     let pre_regions_vec = create_memo(move |_| {
         // sort signal based on the water_color (within the definition of the signal)
         let mut pre_regions_vec = pre_regions_vec.clone();
@@ -57,6 +61,15 @@ pub fn DisplayPreMap(
             (_, c) if c == wc => Ordering::Greater,
             (_, _) => pr1.has_base.cmp(&pr2.has_base),
         });
+
+        // update index map
+        index_map.set(HashMap::new());
+        pre_regions_vec.iter().enumerate().for_each(|(i, (j, _))| {
+            index_map.update(|m| {
+                m.insert(*j, i);
+            })
+        });
+
         pre_regions_vec
     });
 
@@ -77,6 +90,35 @@ pub fn DisplayPreMap(
     };
     let check_goodness_len = move |_ev: Event| {
         goodness_checked.update(|(_, _, _, _, b)| *b = !*b);
+    };
+
+    let test_unit = create_rw_signal(None);
+
+    let select_unit = move || {
+        use UnitType as UT;
+        let change = move |ev: Event| {
+            test_unit.set(match event_target_value(&ev).as_str() {
+                "t" => Some(UT::Tank),
+                "s" => Some(UT::Ship),
+                "p" => Some(UT::Plane),
+                "st" => Some(UT::Supertank),
+                "su" => Some(UT::Submarine),
+                "a" => Some(UT::Artillery),
+                _ => None,
+            })
+        };
+
+        view! {
+            <select on:change=change >
+                <option value=""><Lang hu="Nincs Egység" en="No Unit" /></option>
+                <option value="t"><Lang hu="Tank" en="Tank" /></option>
+                <option value="s"><Lang hu="Hajó" en="Ship" /></option>
+                <option value="p"><Lang hu="Repülő" en="Plane" /></option>
+                <option value="st"><Lang hu="Szupertank" en="Supertank" /></option>
+                <option value="su"><Lang hu="Tengeralattjáró" en="Submarine" /></option>
+                <option value="a"><Lang hu="Tüzérség" en="Artillery" /></option>
+            </select>
+        }
     };
 
     let highlighted = create_rw_signal(HashSet::new()); // the highlighted fields
@@ -147,75 +189,45 @@ pub fn DisplayPreMap(
         view
     };
 
-    let view_info = move |(i, pr): (usize, PreRegion)| {
+    let view_test_unit = move |(_, pr): (_, PreRegion)| {
+        let color = pr.color.invert();
+
+        // logic
+        let (pos, set_pos) = create_signal(pr.pole);
+
+        test_unit().map(|tu| {
+            view! {
+                <UnitSVG ut=tu color=color pos=pos />
+            }
+        })
+    };
+
+    let view_test_units = move || {
+        pre_regions_vec()
+            .into_iter()
+            .map(view_test_unit)
+            .collect_view()
+    };
+
+    let refs_locked = create_rw_signal(true);
+    create_effect(move |_| request_animation_frame(move || refs_locked.set(false)));
+
+    let view_name = move |(i, pr): (usize, PreRegion)| {
+        const BASE_FONT: usize = 13;
+        const EXPANDED_FONT: usize = 14;
+
         let name_ref = create_node_ref::<Text>();
-        let info_ref = create_node_ref::<Div>();
 
-        let (text_locked, set_text_locked) = create_signal(true);
-        create_effect(move |_| request_animation_frame(move || set_text_locked(false)));
+        let fitting_font_size = create_rw_signal(BASE_FONT);
 
-        let fitting_font_size = create_rw_signal(13);
-        let name_wh = create_rw_signal((1., 1.)); // 1 to avoid inf/nan
-        let times_info_wh_called = create_rw_signal(0);
-        let info_wh = create_memo(move |prev: Option<&(f32, f32)>| {
-            let mut wh = (1., 1.);
-            if text_locked() {
+        // indirect highlighted sub - memoized
+        let highlighted = create_memo(move |_| highlighted.with(|hs| hs.contains(&i)));
+
+        // Wh at expanded font size
+        let name_wh = create_memo(move |_prev: Option<&(f32, f32)>| {
+            let mut wh = (EXPANDED_FONT as f32 * 4., EXPANDED_FONT as f32); // approx this
+            if refs_locked() {
                 return wh;
-            }
-            if let Some(prev) = prev {
-                if times_info_wh_called() > 2 {
-                    return *prev;
-                }
-            }
-            times_info_wh_called.update(|n| *n += 1);
-            let _ = highlighted.with(|_| ()); // subscribe to highlighted
-            if let Some(info_ref) = info_ref() {
-                let b_box = info_ref.get_bounding_client_rect();
-                wh = (b_box.width() as f32, b_box.height() as f32);
-            }
-            wh
-        });
-        let text_wh = move || {
-            let (nw, nh): (f32, f32) = name_wh();
-            let (iw, ih) = info_wh(); // info dims are 'regular'-scale, name dims are svg-scale
-            (
-                nw,                       // Extra space for info for short names
-                1.25 * nh + ih * nw / iw, // Have to scale ih to match svg dims
-            )
-        };
-        let prnc = pr.name.clone();
-        //create_effect(move |_| {
-        //    log!(
-        //        "{}: text_wh: {:?}, name_wh: {:?}, what to min: {}",
-        //        &prnc,
-        //        text_wh(),
-        //        name_wh(),
-        //        name_wh().1 * 5.
-        //    )
-        //});
-
-        let overflows = move || pr.pole.get().1 + text_wh().1 - name_wh().1 / 2. > extent.1;
-
-        create_effect(move |_| {
-            if overflows() {
-                log!("{} overflows", prnc)
-            }
-        });
-
-        let times_name_pos_called = create_rw_signal(0);
-        let name_pos = create_memo(move |prev: Option<&(f32, f32)>| {
-            if let Some(prev) = prev {
-                if times_name_pos_called() > 1 {
-                    return *prev;
-                }
-            }
-            times_name_pos_called.update(|n| *n += 1);
-            let mut base_pos = (
-                pr.pole.get().0, // - len as f32 * 13. / 4.,
-                pr.pole.get().1, // + 13. / 3.,
-            );
-            if text_locked() {
-                return base_pos;
             }
             if let Some(name_ref) = name_ref() {
                 if let Ok(b_box) = (*name_ref)
@@ -223,84 +235,60 @@ pub fn DisplayPreMap(
                     .dyn_into::<SvgTextElement>()
                     .map(|tr| tr.get_bounding_client_rect())
                 {
-                    let (w, h) = (b_box.width() as f32, b_box.height() as f32);
-                    name_wh.set((w.max(h * 4.), h)); // Initial wh + padding
-                    let (new_x, new_font_size) = get_new_name_x(base_pos, (w, h), &pr.shape, 13);
-                    fitting_font_size.set(new_font_size);
-                    base_pos = (new_x, base_pos.1)
+                    wh = (b_box.width() as f32, b_box.height() as f32)
                 }
             }
-            base_pos
+            wh
         });
 
-        let font_size = move || {
-            if highlighted.with(|hs| hs.contains(&i)) {
-                14
+        let name_x = Signal::derive(move || {
+            if refs_locked() {
+                pr.pole.get().0
+            } else {
+                let (x0, y) = pr.pole.get();
+                let (x, font) = get_new_name_x((x0, y), name_wh(), &pr.shape, BASE_FONT);
+                fitting_font_size.set(font);
+                x
+            }
+        });
+        let name_y = move || pr.pole.get().1;
+
+        let rect_w = move || {
+            // max of all the infos
+            name_wh().0
+        };
+        let rect_h = move || name_wh().1;
+        // rect_h: sum of names / infos, maybe make rect_wh for less compute
+
+        let rect_x = move || name_x() - rect_w() / 2.;
+        let rect_y = move || name_y() - name_wh().1 / 2.;
+        let rect_r = move || name_wh().1 / 8.;
+
+        let font_style = move || {
+            let font_size = if highlighted() {
+                EXPANDED_FONT
             } else {
                 fitting_font_size()
-            }
+            };
+            format!("font: {}px serif;", font_size)
         };
-
-        let name_pos_x = move || name_pos().0;
-        let name_pos_y = move || {
-            name_pos().1
-                - if highlighted.with(|hs| hs.contains(&i)) && overflows() {
-                    info_wh().1 - name_wh().1
-                } else {
-                    0.
-                }
-        };
-        let expanded_name_pos_y = move || {
-            name_pos().1
-                - if overflows() {
-                    info_wh().1 - name_wh().1
-                } else {
-                    0.
-                }
-        };
-
-        let style_string = move || format!("font: {}px serif;", font_size());
 
         let highlight_opacity = move || {
-            let val = if highlighted.with(|hs| hs.contains(&i)) {
-                0.9
-            } else {
-                0.
-            };
+            let val = if highlighted() { 0.9 } else { 0. };
             format!("opacity:{val};")
         };
 
-        let rect_x = move || name_pos_x() - name_wh().0 / 2.;
-        let rect_y = move || expanded_name_pos_y() - name_wh().1 / 2.;
-        let rect_r = move || name_wh().1 / 8.;
-
-        let info_y = move || expanded_name_pos_y() + name_wh().1 / 2.;
-
         view! {
-            <svg>
-                <rect class="highlight-rect" style=highlight_opacity x=rect_x y=rect_y rx=rect_r
-                    width=move||text_wh().0 height=move||text_wh().1 />
-                <text node_ref=name_ref x=name_pos_x y=name_pos_y
-                    text-anchor="middle" dy="0.35em" style=style_string >
-                    {pr.name}
-                </text>
-                <foreignObject
-                    x=move||name_pos_x()-name_wh().0/2. y=info_y
-                    width=move||text_wh().0 height=extent.1
-                    style=highlight_opacity
-                >
-                    <div node_ref=info_ref style="font-size: 12px;" >
-                        <hr/>
-                        <p>Info thing that may wrap</p>
-                        <p>More info</p>
-                    </div>
-                </foreignObject>
-            </svg>
+            <rect class="highlight-rect" style=highlight_opacity x=rect_x y=rect_y rx=rect_r
+                width=rect_w height=rect_h />
+            <text node_ref=name_ref x=name_x y=name_y
+                text-anchor="middle" dy="0.35em" style=font_style >
+                {pr.name}
+            </text>
         }
-        .into_view()
     };
 
-    let view_infos = move || {
+    let view_names = move || {
         let mut prv = pre_regions_vec();
         let len = prv.len() as f32;
         prv.sort_by(|(_, pr1), (_, pr2)| {
@@ -313,8 +301,76 @@ pub fn DisplayPreMap(
                 Ordering::Equal
             }
         });
-        prv.into_iter().map(view_info).enumerate().collect_view()
+        prv.into_iter().map(view_name).collect_view()
     };
+
+    let view_info = move |(i, is_shore): (&usize, bool)| {
+        let (_, pr) = pre_regions_vec.with(|prs| prs[index_map.with(|im| im[i])].clone());
+
+        let region = move || {
+            if pr.color == water_color() {
+                view! {<Lang hu="Tenger" en="Sea" />}
+            } else if is_shore {
+                if is_strait(&pr.shape) {
+                    view! {<Lang hu="Szoros" en="Strait" />}
+                } else {
+                    view! {<Lang hu="Tengerpart" en="Shore" />}
+                }
+            } else {
+                view! {<Lang hu="Szárazföld" en="Land" />}
+            }
+        };
+
+        let base = move || {
+            if pr.has_base {
+                if let Some((_, _, teamname)) =
+                    teams.with(|ts| ts.iter().find(|(_, tc, _)| tc() == pr.color).cloned())
+                {
+                    Some(view! {"- "{teamname()}" "<Lang hu="anyabázis" en="home base" />})
+                } else {
+                    Some(view! {"- "<Lang hu="Foglalatlan bázis" en="Unconquered base" />})
+                }
+            } else {
+                None
+            }
+        };
+
+        let unit = move || {
+            let color = Signal::derive(|| Color::white());
+            test_unit().map(|tu| {
+                view! {
+                    <hr/>
+                    <UnitSVG ut=tu color=color />
+                    <p><Lang hu="Teszt" en="Test" />" "<UnitName ut=tu /></p>
+                }
+            })
+        };
+
+        view! {
+            <div class="info" >
+                <p class="name" >{pr.name}</p>
+                <hr/>
+                <p>{region}" "{base}</p>
+                {unit}
+            </div>
+        }
+    };
+
+    let view_infos = Signal::derive(move || {
+        highlighted()
+            .iter()
+            .map(|i| {
+                (i, {
+                    pre_regions_signal.with(|prs| {
+                        prs.neighbors_slice(*i as u32).iter().any(|&j| {
+                            pre_regions_signal.with(|prss| prss[j].color == water_color())
+                        })
+                    })
+                })
+            })
+            .map(view_info)
+            .collect_view()
+    });
 
     // toggle borders
     let (border_checked, set_border_checked) = create_signal(true);
@@ -411,11 +467,15 @@ pub fn DisplayPreMap(
                 {/* initial_labels().values().map(|(p, _)| view!{
                     <circle cx={p.get().0} cy={p.get().1} r=3 fill="black"/>
                 }).collect_view() */}
-                <Show when=move||!goodness_checked().0 fallback=||()>
-                    {view_infos}
+                <Show when={/* move||!goodness_checked().0 */ ||true} fallback=||()>
+                    {view_test_units}
+                    {view_names}
                 </Show>
                 <rect x=0 y=0 width=extent.0 height=extent.1 stroke="black" fill="none" />
             </svg>
+        </div>
+        <div class="info-container" >
+            {view_infos}
         </div>
         <div class="checkbox-group">
             <input type="checkbox" id="borders" name="borders" on:input=check_border checked/>
@@ -464,6 +524,7 @@ pub fn DisplayPreMap(
             </div>
         </div>
         </Show>
+        {select_unit}
         </div>
     }
     .into_view()
@@ -482,7 +543,7 @@ fn get_new_name_x(
 
     let mut new_x = x;
 
-    while new_font_size >= 1 {
+    while new_font_size > 1 {
         let dy = font_height_ratio * new_font_size as f32 / 2.;
         let upper_y = y + dy;
         let lower_y = y - dy;
@@ -526,6 +587,148 @@ fn get_new_name_x(
     }
 
     (new_x, new_font_size)
+}
+
+fn is_strait(shape: &Shape) -> bool {
+    let points = shape.points();
+    // By default reference to empty slice
+    let mut strait_points = &points[0..0];
+
+    for i in 0..points.len() - 3 {
+        let (p1, p2) = (points[i], points[i + 1]);
+        for j in i..points.len() - 1 {
+            let (p3, p4) = (points[j], points[j + 1]);
+            if p1 == p4 && p2 == p3 {
+                strait_points = &points[i..=i + 1];
+            }
+        }
+    }
+
+    !strait_points.is_empty()
+}
+
+#[component]
+fn UnitName(ut: UnitType) -> impl IntoView {
+    use UnitType as UT;
+    match ut {
+        UT::Tank => view! {<Lang hu="Tank" en="Tank" />},
+        UT::Ship => view! {<Lang hu="Hajó" en="Ship" />},
+        UT::Plane => view! {<Lang hu="Repülő" en="Plane" />},
+        UT::Supertank => view! {<Lang hu="Szupertank" en="Supertank" />},
+        UT::Submarine => view! {<Lang hu="Tengeralattjáró" en="Submarine" />},
+        UT::Artillery => view! {<Lang hu="Tüzérség" en="Artillery" />},
+    }
+}
+
+#[component]
+fn UnitSVG(
+    ut: UnitType,
+    #[prop(into)] color: Signal<Color>,
+    #[prop(optional)] pos: Option<ReadSignal<Point>>, // these to if it's in an SVG
+    #[prop(optional)] fit_inside: Option<Shape>,
+) -> impl IntoView {
+    let size = 1.; // Will come from fit_inside (largest supertank that can fit)
+
+    let viewBox = create_rw_signal("-1.1 -1.1 2.2 2.2");
+    let scale = create_rw_signal(1.);
+
+    let sq32: f32 = (3f32 / 2f32).sqrt();
+    let scale_points = move |pts: Vec<(f32, f32)>| {
+        let pts: Vec<Point> = pts.into_iter().map(Point::from).collect();
+        let centroid = Shape::new(&pts).centroid();
+        let pts: Vec<Point> = pts.into_iter().map(|p| p - centroid).collect();
+
+        // furthest from centroid (which is now 0,0 )
+        let furthest_point = pts
+            .iter()
+            .max_by(|a, b| {
+                a.square()
+                    .partial_cmp(&b.square())
+                    .unwrap_or(Ordering::Equal)
+            })
+            .expect("a max");
+        let dist = furthest_point.square().sqrt(); // this should be scaled to 1
+
+        pts.into_iter()
+            .map(|p| p * (scale() / dist))
+            .collect::<Vec<Point>>()
+    };
+    let points_to_string = move |pts: Vec<Point>| {
+        pts.into_iter()
+            .map(|p| {
+                let (x, y) = p.get();
+                format!("{x},{y}")
+            })
+            .collect::<Vec<String>>()
+            .join(" ")
+    };
+
+    let style = move || {
+        format!(
+            "fill:{};stroke:black;stroke-width:{};stroke-linejoin:miter;",
+            color(),
+            0.1 * scale().sqrt() / size,
+        )
+    };
+
+    use UnitType as UT;
+    let shape = move || match ut {
+        UT::Tank => {
+            let points = vec![(0., -1.3), (sq32, 0.5), (-sq32, 0.5)];
+            let points = points_to_string(scale_points(points));
+            view! {<polygon points=points style=style />}.into_view()
+        }
+        UT::Ship => view! {<circle cx=0 cy=0 r=1 style=style />}.into_view(),
+        UT::Plane => view! {<rect x=-1 y=-1 width=2 height=2 style=style />}.into_view(),
+        UT::Supertank => {
+            viewBox.set("-1.9 -1.1 3.8 2.2");
+            scale.set(2.);
+            let points = vec![
+                (0., -1.3),
+                (-sq32, 0.6),
+                (2. * sq32, 0.6),
+                (sq32, -1.3),
+                (sq32 / 2., -0.25),
+            ];
+            let points = points_to_string(scale_points(points));
+            view! {<polygon points=points style=style />}.into_view()
+        }
+        UT::Submarine => {
+            viewBox.set("-1.1 -0.45 2.2 0.9");
+            view! {<rect x=-1 y=-0.35 width=2 height=0.7 rx=0.35 style=style />}.into_view()
+        }
+        UT::Artillery => {
+            let points = vec![
+                (-1.3, 0.),
+                (-0.6, sq32),
+                (0.6, sq32),
+                (1.3, 0.),
+                (0.6, -sq32),
+                (-0.6, -sq32),
+            ];
+            let points = points_to_string(scale_points(points));
+            view! {<polygon points=points style=style />}.into_view()
+        }
+    };
+
+    if let Some(pos) = pos {
+        let side_len = 60; // will come from fit_inside
+        let (mut x, mut y) = pos().get();
+        x -= side_len as f32 / 2.;
+        y -= side_len as f32 / 2.;
+        view! {
+            <svg style="pointer-events:none;"
+                x=x y=y width=side_len height=side_len viewBox=viewBox >
+                {shape}
+            </svg>
+        }
+    } else {
+        view! {
+            <svg viewBox=viewBox >
+                {shape}
+            </svg>
+        }
+    }
 }
 
 // proper rendering, maybe?

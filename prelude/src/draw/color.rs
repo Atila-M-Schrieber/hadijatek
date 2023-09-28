@@ -33,6 +33,10 @@ impl Color {
     pub fn highlight(&self, amount: f32) -> Self {
         ColorHSL::from(*self).highlight(amount).into()
     }
+
+    pub fn invert(&self) -> Self {
+        ColorHSL::from(*self).invert().into()
+    }
 }
 
 fn rgb_to_hsl(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
@@ -151,6 +155,11 @@ impl ColorHSL {
         // new_l = new_l.min(1.0).max(0.0);
         // let new_l = (l + amount).min(1.0).max(0.0); // Clamp to [0, 1]
         ColorHSL(h, s, new_l)
+    }
+
+    pub fn invert(&self) -> Self {
+        let ColorHSL(h, s, l) = *self;
+        ColorHSL((h + 0.5).fract(), s, l)
     }
 }
 

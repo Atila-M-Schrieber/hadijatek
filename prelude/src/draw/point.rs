@@ -26,6 +26,10 @@ impl Point {
         (self.0, self.1)
     }
 
+    pub fn get_ref(&self) -> (f32, f32) {
+        (self.0, self.1)
+    }
+
     pub fn square(self) -> f32 {
         let Point(x, y) = self;
         x * x + y * y

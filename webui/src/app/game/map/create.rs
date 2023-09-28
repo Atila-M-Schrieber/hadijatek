@@ -161,7 +161,7 @@ pub fn CreateMapPage() -> impl IntoView {
             <Show when=file_is_processed
                 fallback=||()>
                 <DisplayPreMap pre_regions=pre_regions goodnesses=goodnesses
-                    initial_labels=initial_labels select=select
+                    teams=teams select=select
                     water_color=water_color water_stroke=water_stroke
                     land_stroke=land_stroke done=set_can_contract />
                 <div  >
